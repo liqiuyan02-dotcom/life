@@ -93,8 +93,8 @@ function authMiddleware(req, res, next) {
 const STORE_WHITELIST = ['ledgers', 'transactions', 'habits', 'checkins', 'categories', 'notes', 'settlements'];
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
-function seedDefaults(db, uid) {
-  const b = userBucket(db, uid);
+function seedDefaults(db, userUid) {
+  const b = userBucket(db, userUid);
   const created = { ledgers: [], habits: [], categories: [], notes: [] };
   if (b.ledgers.length === 0) {
     const l = { id: uid(), name: '日常账本', members: ['我'], color: 0, createdAt: new Date().toISOString() };
@@ -244,11 +244,19 @@ app.post('/api/:store', authMiddleware, (req, res) => {
 
 app.put('/api/:store/:id', authMiddleware, (req, res) => {
   const { store, id } = req.params;
+  if (store === 'meta') return res.status(400).json({ error: 'meta 不支持该操作' });
   if (!STORE_WHITELIST.includes(store)) return res.status(400).json({ error: '无效的数据表' });
   const db = loadDB();
   const b = userBucket(db, req.uid);
   const idx = b[store].findIndex(it => it.id === id);
-  if (idx < 0) return res.status(404).json({ error: '未找到' });
+  if (idx < 0) {
+    // 不存在则按给定 id 创建（前端新建账目/习惯/笔记均走 PUT，等价于 upsert）
+    const item = { ...req.body, id, userId: req.uid };
+    if (!item.createdAt) item.createdAt = new Date().toISOString();
+    b[store].push(item);
+    saveDB(db);
+    return res.json(item);
+  }
   b[store][idx] = { ...b[store][idx], ...req.body, id, userId: req.uid };
   saveDB(db);
   res.json(b[store][idx]);
