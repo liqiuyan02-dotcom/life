@@ -290,6 +290,7 @@ input[type="number"] { -webkit-appearance: none; }
 /* ========== 工作台首页 ========== */
 .home-date { font-size: 13px; color: var(--text-secondary); }
 .home-greeting { font-size: 24px; font-weight: 700; margin-top: 2px; }
+.home-account { font-size: 13px; color: var(--primary); margin-top: 4px; font-weight: 600; }
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .stat-card {
   background: var(--card-bg);
@@ -706,6 +707,7 @@ input[type="number"] { -webkit-appearance: none; }
         <div>
           <div class="home-date" id="homeDate"></div>
           <div class="home-greeting">我的工作台</div>
+          <div class="home-account" id="homeAccount"></div>
         </div>
         <div class="btn-icon" onclick="App.openSettings()">⚙️</div>
       </div>
@@ -2757,6 +2759,14 @@ const Home = {
     const now = new Date();
     document.getElementById('homeDate').textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${Utils.weekDay()}`;
     document.querySelector('.home-greeting').textContent = `${Utils.greeting()} 👋`;
+
+    // 当前登录账号 / 模式
+    const acctEl = document.getElementById('homeAccount');
+    if (acctEl) {
+      acctEl.textContent = DB.mode === 'cloud'
+        ? `☁️ 已登录：${Auth.phone || ''}`
+        : '📱 本地模式（未登录）';
+    }
 
     // 统计卡片
     const ledger = await Finance.getCurrentLedger();
