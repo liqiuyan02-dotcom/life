@@ -1,10 +1,16 @@
 /**
  * 个人工作台 — 云端后端
- * 仅依赖 express。数据存 JSON 文件（server/data/db.json），按 userId 隔离。
+ * 依赖 express + pg（当设置了 DATABASE_URL 时使用 PostgreSQL 持久化，跨重启不丢数据）。
+ * 未设置 DATABASE_URL 时回退到本地 JSON 文件（server/data/db.json），便于本地开发。
  * 认证：手机号 + 密码（crypto.scrypt 哈希），token 用 HMAC-SHA256 签名。
  * 同源部署：后端同时用 express.static 托管 public/index.html，前端 fetch('/api/...') 同源。
  *
- * 启动： node server.js   （可选环境变量 PORT / SECRET / DATA_FILE）
+ * 启动： node server.js
+ * 环境变量：
+ *   PORT           监听端口（Render 会注入）
+ *   SECRET        token 签名密钥
+ *   DATABASE_URL   PostgreSQL 连接串（设置后启用持久化存储，推荐在 Render 上挂免费 Postgres）
+ *   DATA_FILE     仅本地文件模式使用（默认 server/data/db.json）
  */
 const express = require('express');
 const crypto = require('crypto');
@@ -13,7 +19,20 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3001;
 const SECRET = process.env.SECRET || 'workbench-dev-secret-change-me';
+const USE_PG = !!process.env.DATABASE_URL;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
+
+// ---------- PostgreSQL 连接（可选）----------
+let pool = null;
+if (USE_PG) {
+  const { Pool } = require('pg');
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: 5,
+  });
+  pool.on('error', (e) => console.error('[pg] unexpected error', e.message));
+}
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -28,17 +47,33 @@ app.use((req, res, next) => {
 });
 
 // ---------- 数据层 ----------
-function loadDB() {
+const EMPTY_DB = () => ({ users: {}, data: {} });
+
+async function loadDB() {
+  if (USE_PG) {
+    const r = await pool.query("SELECT value FROM kv WHERE key = 'db'");
+    if (r.rows.length) return r.rows[0].value;
+    return EMPTY_DB();
+  }
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
   } catch (e) {
-    return { users: {}, data: {} };
+    return EMPTY_DB();
   }
 }
-function saveDB(db) {
+
+async function saveDB(db) {
+  if (USE_PG) {
+    await pool.query(
+      "INSERT INTO kv (key, value) VALUES ('db', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [JSON.stringify(db)]
+    );
+    return;
+  }
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
+
 function userBucket(db, uid) {
   if (!db.data[uid]) {
     db.data[uid] = {
@@ -93,7 +128,7 @@ function authMiddleware(req, res, next) {
 const STORE_WHITELIST = ['ledgers', 'transactions', 'habits', 'checkins', 'categories', 'notes', 'settlements'];
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
-function seedDefaults(db, userUid) {
+async function seedDefaults(db, userUid) {
   const b = userBucket(db, userUid);
   const created = { ledgers: [], habits: [], categories: [], notes: [] };
   if (b.ledgers.length === 0) {
@@ -125,29 +160,29 @@ function seedDefaults(db, userUid) {
       b.categories.push(cat); created.categories.push(cat);
     }
   }
-  saveDB(db);
+  await saveDB(db);
   return created;
 }
 
 // ---------- 认证路由 ----------
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { phone, password } = req.body || {};
   if (!phone || !/^\d{6,20}$/.test(String(phone))) return res.status(400).json({ error: '请输入有效的手机号' });
   if (!password || String(password).length < 4) return res.status(400).json({ error: '密码至少 4 位' });
-  const db = loadDB();
+  const db = await loadDB();
   if (db.users[phone]) return res.status(409).json({ error: '该手机号已注册，请直接登录' });
   const { salt, hash } = hashPassword(password);
   const id = uid();
   db.users[phone] = { id, phone: String(phone), salt, passwordHash: hash };
   userBucket(db, id); // 初始化空桶
-  saveDB(db);
+  await saveDB(db);
   const token = signToken(id, String(phone));
   res.json({ token, user: { id, phone: String(phone) } });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { phone, password } = req.body || {};
-  const db = loadDB();
+  const db = await loadDB();
   const u = db.users[phone];
   if (!u || !verifyPassword(String(password || ''), u.salt, u.passwordHash)) {
     return res.status(401).json({ error: '手机号或密码错误' });
@@ -161,46 +196,44 @@ app.get('/api/me', authMiddleware, (req, res) => {
 });
 
 // ---------- 健康检查（公开，必须放在通用 /api/:store 之前）----------
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get('/api/health', (req, res) => res.json({ ok: true, storage: USE_PG ? 'postgres' : 'file' }));
 
 // ---------- 种子 ----------
-app.post('/api/seed-defaults', authMiddleware, (req, res) => {
-  const db = loadDB();
-  const created = seedDefaults(db, req.uid);
+app.post('/api/seed-defaults', authMiddleware, async (req, res) => {
+  const db = await loadDB();
+  const created = await seedDefaults(db, req.uid);
   res.json({ ok: true, created });
 });
 
 // ---------- 导出 / 导入（必须放在 /api/:store 通配路由之前）----------
-app.get('/api/export', authMiddleware, (req, res) => {
-  const db = loadDB();
+app.get('/api/export', authMiddleware, async (req, res) => {
+  const db = await loadDB();
   const b = userBucket(db, req.uid);
   res.json({ version: 1, exportedAt: new Date().toISOString(), data: b });
 });
-app.post('/api/import', authMiddleware, (req, res) => {
+app.post('/api/import', authMiddleware, async (req, res) => {
   const incoming = req.body && req.body.data;
   if (!incoming) return res.status(400).json({ error: '缺少 data' });
-  const db = loadDB();
+  const db = await loadDB();
   const b = userBucket(db, req.uid);
   for (const s of STORE_WHITELIST) {
     if (Array.isArray(incoming[s])) b[s] = incoming[s].map(it => ({ ...it, userId: req.uid }));
   }
   if (incoming.meta && typeof incoming.meta === 'object') b.meta = incoming.meta;
-  saveDB(db);
+  await saveDB(db);
   res.json({ ok: true });
 });
 
 // ---------- 通用 CRUD ----------
-app.get('/api/:store', authMiddleware, (req, res) => {
+app.get('/api/:store', authMiddleware, async (req, res) => {
   const { store } = req.params;
+  const db = await loadDB();
+  const b = userBucket(db, req.uid);
   if (store === 'meta') {
-    const db = loadDB();
-    const b = userBucket(db, req.uid);
     if (req.query.key) return res.json(b.meta[req.query.key] ?? null);
     return res.json(b.meta);
   }
   if (!STORE_WHITELIST.includes(store)) return res.status(400).json({ error: '无效的数据表' });
-  const db = loadDB();
-  const b = userBucket(db, req.uid);
   let items = b[store];
   if (req.query.index && req.query.value !== undefined) {
     const idx = req.query.index;
@@ -210,43 +243,43 @@ app.get('/api/:store', authMiddleware, (req, res) => {
   res.json(items);
 });
 
-app.get('/api/:store/:id', authMiddleware, (req, res) => {
+app.get('/api/:store/:id', authMiddleware, async (req, res) => {
   const { store, id } = req.params;
   if (store === 'meta') return res.json(null);
   if (!STORE_WHITELIST.includes(store)) return res.status(400).json({ error: '无效的数据表' });
-  const db = loadDB();
+  const db = await loadDB();
   const b = userBucket(db, req.uid);
   const item = b[store].find(it => it.id === id);
   if (!item) return res.status(404).json({ error: '未找到' });
   res.json(item);
 });
 
-app.post('/api/:store', authMiddleware, (req, res) => {
+app.post('/api/:store', authMiddleware, async (req, res) => {
   const { store } = req.params;
   if (store === 'meta') {
     const { key, value } = req.body || {};
     if (!key) return res.status(400).json({ error: '缺少 key' });
-    const db = loadDB();
+    const db = await loadDB();
     const b = userBucket(db, req.uid);
     b.meta[key] = value;
-    saveDB(db);
+    await saveDB(db);
     return res.json({ ok: true });
   }
   if (!STORE_WHITELIST.includes(store)) return res.status(400).json({ error: '无效的数据表' });
-  const db = loadDB();
+  const db = await loadDB();
   const b = userBucket(db, req.uid);
   const item = { ...req.body, id: req.body.id || uid(), userId: req.uid };
   if (!item.createdAt) item.createdAt = new Date().toISOString();
   b[store].push(item);
-  saveDB(db);
+  await saveDB(db);
   res.json(item);
 });
 
-app.put('/api/:store/:id', authMiddleware, (req, res) => {
+app.put('/api/:store/:id', authMiddleware, async (req, res) => {
   const { store, id } = req.params;
   if (store === 'meta') return res.status(400).json({ error: 'meta 不支持该操作' });
   if (!STORE_WHITELIST.includes(store)) return res.status(400).json({ error: '无效的数据表' });
-  const db = loadDB();
+  const db = await loadDB();
   const b = userBucket(db, req.uid);
   const idx = b[store].findIndex(it => it.id === id);
   if (idx < 0) {
@@ -254,22 +287,22 @@ app.put('/api/:store/:id', authMiddleware, (req, res) => {
     const item = { ...req.body, id, userId: req.uid };
     if (!item.createdAt) item.createdAt = new Date().toISOString();
     b[store].push(item);
-    saveDB(db);
+    await saveDB(db);
     return res.json(item);
   }
   b[store][idx] = { ...b[store][idx], ...req.body, id, userId: req.uid };
-  saveDB(db);
+  await saveDB(db);
   res.json(b[store][idx]);
 });
 
-app.delete('/api/:store/:id', authMiddleware, (req, res) => {
+app.delete('/api/:store/:id', authMiddleware, async (req, res) => {
   const { store, id } = req.params;
   if (!STORE_WHITELIST.includes(store)) return res.status(400).json({ error: '无效的数据表' });
-  const db = loadDB();
+  const db = await loadDB();
   const b = userBucket(db, req.uid);
   const before = b[store].length;
   b[store] = b[store].filter(it => it.id !== id);
-  saveDB(db);
+  await saveDB(db);
   res.json({ ok: true, deleted: before - b[store].length });
 });
 
@@ -281,6 +314,32 @@ app.use((req, res, next) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`[workbench] server listening on http://localhost:${PORT}`);
-});
+// ---------- 启动 ----------
+async function initStore() {
+  if (!USE_PG) {
+    console.log('[workbench] 使用本地 JSON 文件存储:', DATA_FILE);
+    return;
+  }
+  await pool.query(
+    "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB NOT NULL)"
+  );
+  // 可选：通过环境变量 SEED_PHONE / SEED_PASSWORD 在数据库为空时预建账号
+  const db = await loadDB();
+  if (Object.keys(db.users || {}).length === 0 && process.env.SEED_PHONE && process.env.SEED_PASSWORD) {
+    const { salt, hash } = hashPassword(process.env.SEED_PASSWORD);
+    const id = uid();
+    db.users[process.env.SEED_PHONE] = { id, phone: String(process.env.SEED_PHONE), salt, passwordHash: hash };
+    userBucket(db, id);
+    await saveDB(db);
+    console.log('[workbench] 已预建账号:', process.env.SEED_PHONE);
+  }
+  console.log('[workbench] 使用 PostgreSQL 持久化存储');
+}
+
+initStore()
+  .catch((e) => console.error('[workbench] 存储初始化失败:', e.message))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`[workbench] server listening on http://localhost:${PORT}`);
+    });
+  });
