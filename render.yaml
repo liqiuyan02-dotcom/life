@@ -1,0 +1,22 @@
+# Render.com 部署配置（免费 Web 服务）
+# 用法：把整个 server/ 目录推到 GitHub 仓库，在 Render 新建 "Blueprint" 并连接该仓库即可。
+services:
+  - type: web
+    name: workbench-server
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: SECRET
+        generateValue: true
+      - key: DATA_FILE
+        value: "/data/db.json"
+# 注意：免费实例文件系统会在每次部署/重启时重置，db.json 会清空。
+# 若要持久保存云端数据，请在 Render 后台为该服务挂载一个 Disk（挂载路径 /data），
+# 并把上面的 DATA_FILE 指向挂载路径（已设为 /data/db.json）。

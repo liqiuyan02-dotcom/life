@@ -1,0 +1,3398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#00b894">
+<title>我的工作台</title>
+<style>
+/* ========== CSS 变量 ========== */
+:root {
+  --primary: #00b894;
+  --primary-light: #55efc4;
+  --primary-dark: #00a381;
+  --secondary: #0984e3;
+  --bg: #f0f2f5;
+  --card-bg: #ffffff;
+  --text: #2d3436;
+  --text-secondary: #636e72;
+  --text-light: #b2bec3;
+  --border: #dfe6e9;
+  --danger: #d63031;
+  --warning: #fdcb6e;
+  --success: #00b894;
+  --purple: #6c5ce7;
+  --orange: #e17055;
+  --pink: #fd79a8;
+  --teal: #00cec9;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 20px rgba(0,0,0,0.12);
+  --radius: 14px;
+  --radius-sm: 8px;
+  --tab-height: 56px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+input, textarea, select, button { font-family: inherit; font-size: inherit; }
+button { cursor: pointer; border: none; background: none; }
+input[type="number"] { -webkit-appearance: none; }
+
+/* ========== 应用容器 ========== */
+#app {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========== 页面区域 ========== */
+.page-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--tab-height) + var(--safe-bottom) + 10px);
+}
+.page { display: none; padding: 12px; }
+.page.active { display: block; }
+
+/* ========== 顶部标题 ========== */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 16px;
+}
+.page-title { font-size: 22px; font-weight: 700; }
+.page-header .btn-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+  font-size: 18px;
+}
+
+/* ========== 底部导航 ========== */
+.tab-bar {
+  height: calc(var(--tab-height) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: var(--card-bg);
+  display: flex;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-light);
+  transition: color 0.2s;
+}
+.tab-item.active { color: var(--primary); }
+.tab-item .icon { font-size: 22px; line-height: 1; }
+.tab-item .label { font-size: 11px; }
+
+/* ========== 卡片 ========== */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ========== 按钮 ========== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 500;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-block { display: flex; width: 100%; }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+
+/* ========== 浮动添加按钮 ========== */
+.fab {
+  position: fixed;
+  bottom: calc(var(--tab-height) + var(--safe-bottom) + 20px);
+  right: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,184,148,0.4);
+  z-index: 100;
+  transition: transform 0.2s;
+}
+.fab:active { transform: scale(0.9); }
+
+/* ========== 底部弹出表单 ========== */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.sheet-overlay.show { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card-bg);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(20px + var(--safe-bottom));
+  z-index: 201;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.sheet.show { transform: translateY(0); }
+.sheet-handle {
+  width: 40px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.sheet-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; text-align: center; }
+
+/* ========== 表单元素 ========== */
+.form-group { margin-bottom: 16px; }
+.form-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block; font-weight: 500; }
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fafbfc;
+  font-size: 15px;
+  color: var(--text);
+  transition: border-color 0.2s;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #fff;
+}
+.form-textarea { resize: none; min-height: 80px; }
+.form-row { display: flex; gap: 12px; }
+.form-row > * { flex: 1; }
+
+/* ========== 选择芯片 ========== */
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: #f0f2f5;
+  font-size: 14px;
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  transition: all 0.2s;
+  user-select: none;
+}
+.chip.active { background: var(--primary); color: #fff; }
+.chip.selectable:active { transform: scale(0.95); }
+
+/* ========== 多选成员芯片 ========== */
+.member-chip {
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: #f0f2f5;
+  font-size: 14px;
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  transition: all 0.2s;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.member-chip.active { background: var(--primary); color: #fff; }
+.member-chip .check { font-size: 12px; }
+
+/* ========== 列表项 ========== */
+.list-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.list-item:last-child { border-bottom: none; }
+.list-item-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.list-item-content { flex: 1; min-width: 0; }
+.list-item-title { font-size: 15px; font-weight: 500; }
+.list-item-sub { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+.list-item-right { text-align: right; flex-shrink: 0; }
+.list-item-amount { font-size: 16px; font-weight: 600; }
+.list-item-time { font-size: 12px; color: var(--text-light); }
+
+/* ========== 空状态 ========== */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-light);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state .text { font-size: 15px; }
+
+/* ========== 工作台首页 ========== */
+.home-date { font-size: 13px; color: var(--text-secondary); }
+.home-greeting { font-size: 24px; font-weight: 700; margin-top: 2px; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.stat-card .stat-label { font-size: 12px; color: var(--text-secondary); }
+.stat-card .stat-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+.stat-card .stat-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+
+/* 打卡快捷区 */
+.habit-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+.habit-quick-item {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 14px 10px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  position: relative;
+  transition: transform 0.15s;
+}
+.habit-quick-item:active { transform: scale(0.95); }
+.habit-quick-item .hq-icon { font-size: 28px; }
+.habit-quick-item .hq-name { font-size: 12px; margin-top: 4px; color: var(--text-secondary); }
+.habit-quick-item .hq-status {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.habit-quick-item.done { opacity: 0.6; }
+
+/* ========== 首页打卡日历 ========== */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-wd { text-align: center; font-size: 11px; color: var(--text-light); padding: 2px 0; }
+.cal-cell { min-height: 46px; border-radius: 8px; background: var(--bg); padding: 3px 2px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow: hidden; }
+.cal-cell.empty { background: transparent; }
+.cal-cell.today { background: var(--primary); color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
+.cal-cell.today .cal-num { color: #fff; }
+.cal-num { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.cal-icons { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; margin-top: 1px; }
+.cal-ic { font-size: 11px; line-height: 1; }
+.cal-more { font-size: 9px; color: var(--text-light); }
+.cal-spend { font-size: 9px; color: var(--warning); margin-top: 1px; }
+.cal-cell.today .cal-spend { color: #fff; }
+
+/* ========== 打卡项目卡片 ========== */
+.habit-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.habit-card .hc-icon {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.habit-card .hc-body { flex: 1; min-width: 0; }
+.habit-card .hc-name { font-size: 16px; font-weight: 600; }
+.habit-card .hc-info { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.habit-card .hc-streak {
+  font-size: 12px;
+  color: var(--orange);
+  font-weight: 600;
+  margin-top: 2px;
+}
+.habit-card .hc-btn {
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.habit-card .hc-btn.done { background: var(--border); color: var(--text-light); }
+.habit-card .hc-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.habit-card .hc-del { font-size: 16px; opacity: 0.4; cursor: pointer; padding: 4px; transition: opacity 0.2s; }
+.habit-card .hc-del:hover { opacity: 1; }
+
+/* ========== 打卡趋势图 ========== */
+.chart-container { width: 100%; overflow-x: auto; padding: 8px 0; }
+.chart-svg { display: block; }
+
+/* ========== 记事 ========== */
+.note-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+}
+.note-card .nc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.note-card .nc-cat {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+.note-card .nc-time { font-size: 12px; color: var(--text-light); margin-left: auto; }
+.note-card .nc-content { font-size: 15px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.note-card .nc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.note-card .nc-tag {
+  font-size: 12px;
+  color: var(--secondary);
+  background: rgba(9,132,227,0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+/* 升级：标题 + 卡片展开体验 */
+.note-card { cursor: pointer; transition: transform 0.12s, box-shadow 0.2s; }
+.note-card:active { transform: scale(0.99); }
+.note-card .nc-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; word-break: break-word; }
+.note-card .nc-content.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.note-card .nc-expand {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 500;
+}
+.note-card .nc-edit {
+  margin-left: 6px;
+  font-size: 14px;
+  opacity: 0.4;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.note-card .nc-edit:active { opacity: 1; background: var(--bg); }
+
+/* 搜索框 */
+.search-box {
+  width: 100%;
+  padding: 10px 14px 10px 36px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--card-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b2bec3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'%3E%3C/line%3E%3C/svg%3E") 12px center no-repeat;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+/* ========== 结算卡片 ========== */
+.settlement-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settlement-card .sc-from, .settlement-card .sc-to {
+  flex: 1;
+  text-align: center;
+}
+.settlement-card .sc-name { font-size: 15px; font-weight: 600; }
+.settlement-card .sc-role { font-size: 12px; color: var(--text-secondary); }
+.settlement-card .sc-arrow { font-size: 24px; color: var(--text-light); }
+.settlement-card .sc-amount { font-size: 18px; font-weight: 700; color: var(--danger); }
+.settlement-card .sc-amount.paid { color: var(--success); }
+
+/* 成员余额 */
+.balance-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.balance-card .bc-name { font-size: 15px; font-weight: 500; }
+.balance-card .bc-bal { font-size: 16px; font-weight: 700; }
+.balance-card .bc-bal.positive { color: var(--success); }
+.balance-card .bc-bal.negative { color: var(--danger); }
+
+/* ========== 账本选择 ========== */
+.ledger-selector {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.ledger-selector::-webkit-scrollbar { display: none; }
+.ledger-chip {
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: var(--card-bg);
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+  flex-shrink: 0;
+  border: 2px solid transparent;
+}
+.ledger-chip.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+/* ========== Toast ========== */
+.toast {
+  position: fixed;
+  bottom: calc(var(--tab-height) + var(--safe-bottom) + 80px);
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(45,52,54,0.92);
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ========== 分段控制 ========== */
+.segment {
+  display: flex;
+  background: #e9ecef;
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 12px;
+}
+.segment-item {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+.segment-item.active { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+/* ========== 滚动隐藏 ========== */
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ========== 打卡历史列表 ========== */
+.checkin-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.checkin-item:last-child { border-bottom: none; }
+.checkin-item .ci-value { font-size: 18px; font-weight: 700; color: var(--primary); }
+.checkin-item .ci-note { font-size: 14px; color: var(--text-secondary); flex: 1; }
+.checkin-item .ci-time { font-size: 12px; color: var(--text-light); text-align: right; }
+
+/* ========== 操作菜单 ========== */
+.action-row { display: flex; gap: 8px; margin-top: 16px; }
+.action-row .btn { flex: 1; }
+
+/* ========== 数字键盘风格 ========== */
+.amount-display {
+  text-align: center;
+  font-size: 36px;
+  font-weight: 700;
+  padding: 16px 0;
+  color: var(--text);
+}
+.amount-display .currency { font-size: 20px; color: var(--text-secondary); }
+
+/* 分类颜色 */
+.cat-color-0 { background: #ffeaa7; color: #d4a017; }
+.cat-color-1 { background: #fab1a0; color: #e17055; }
+.cat-color-2 { background: #a29bfe; color: #6c5ce7; }
+.cat-color-3 { background: #55efc4; color: #00a381; }
+.cat-color-4 { background: #74b9ff; color: #0984e3; }
+.cat-color-5 { background: #fd79a8; color: #e84393; }
+.cat-color-6 { background: #ffeaa7; color: #fdcb6e; }
+.cat-color-7 { background: #b2bec3; color: #636e72; }
+
+/* 图标颜色 */
+.icon-bg-0 { background: #ffeaa7; }
+.icon-bg-1 { background: #fab1a0; }
+.icon-bg-2 { background: #a29bfe; }
+.icon-bg-3 { background: #55efc4; }
+.icon-bg-4 { background: #74b9ff; }
+.icon-bg-5 { background: #fd79a8; }
+.icon-bg-6 { background: #ffeaa7; }
+.icon-bg-7 { background: #00cec9; }
+
+/* 确认弹窗 */
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.confirm-dialog.show { opacity: 1; pointer-events: auto; }
+.confirm-box {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 100%;
+  max-width: 300px;
+  text-align: center;
+  transform: scale(0.9);
+  transition: transform 0.25s;
+}
+.confirm-dialog.show .confirm-box { transform: scale(1); }
+.confirm-text { font-size: 16px; margin-bottom: 20px; }
+.confirm-actions { display: flex; gap: 12px; }
+.confirm-actions .btn { flex: 1; }
+
+/* 标签输入 */
+.tag-input-area { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: #fafbfc; min-height: 46px; align-items: center; }
+.tag-input-area .tag-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(9,132,227,0.1); color: var(--secondary); border-radius: 12px; font-size: 13px; }
+.tag-input-area .tag-pill .remove { cursor: pointer; font-size: 15px; line-height: 1; }
+.tag-input-area input { border: none; outline: none; background: transparent; flex: 1; min-width: 80px; font-size: 14px; }
+
+/* 自定义分摊比例输入 */
+.split-ratio-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.split-ratio-row .sr-name { flex: 1; font-size: 14px; }
+.split-ratio-row input { width: 60px; padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 6px; text-align: center; font-size: 14px; }
+.split-ratio-row .sr-unit { font-size: 13px; color: var(--text-secondary); }
+
+/* 设置页 */
+.setting-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.setting-item:last-child { border-bottom: none; }
+.setting-item .si-icon { font-size: 20px; width: 28px; text-align: center; }
+.setting-item .si-label { flex: 1; font-size: 15px; }
+.setting-item .si-arrow { color: var(--text-light); }
+
+/* ===== 登录界面 ===== */
+#authScreen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: linear-gradient(160deg, #00b894 0%, #55efc4 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.auth-logo { font-size: 54px; margin-bottom: 6px; }
+.auth-title { color: #fff; font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.auth-sub { color: rgba(255,255,255,.88); font-size: 13px; margin-bottom: 26px; text-align: center; line-height: 1.5; }
+.auth-card {
+  width: 100%; max-width: 360px; background: #fff; border-radius: 16px;
+  padding: 22px 20px; box-shadow: 0 10px 30px rgba(0,0,0,.15);
+}
+.auth-tabs { display: flex; margin-bottom: 16px; }
+.auth-tab {
+  flex: 1; text-align: center; padding: 10px 0; font-size: 15px; font-weight: 600;
+  color: var(--text-light); border-bottom: 2px solid transparent; cursor: pointer;
+}
+.auth-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.auth-input {
+  width: 100%; box-sizing: border-box; padding: 12px 14px; margin-bottom: 12px;
+  border: 1px solid var(--border); border-radius: 10px; font-size: 15px;
+}
+.auth-btn {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: var(--primary); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;
+}
+.auth-btn:active { opacity: .85; }
+.auth-hint { margin-top: 14px; font-size: 12px; color: var(--text-light); text-align: center; line-height: 1.5; }
+.auth-local {
+  margin-top: 16px; width: 100%; max-width: 360px; text-align: center;
+  color: #fff; font-size: 13px; text-decoration: underline; cursor: pointer; opacity: .92;
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ===== 页面容器 ===== -->
+  <div class="page-container" id="pageContainer">
+
+    <!-- ===== 工作台首页 ===== -->
+    <div class="page active" id="page-home">
+      <div class="page-header">
+        <div>
+          <div class="home-date" id="homeDate"></div>
+          <div class="home-greeting">我的工作台</div>
+        </div>
+        <div class="btn-icon" onclick="App.openSettings()">⚙️</div>
+      </div>
+
+      <div class="stat-grid" id="homeStats"></div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>📅 打卡日历</span>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button class="btn btn-sm btn-secondary" onclick="Home.prevMonth()">‹</button>
+            <span id="calMonthLabel" style="font-size:13px;font-weight:600;min-width:84px;text-align:center"></span>
+            <button class="btn btn-sm btn-secondary" onclick="Home.nextMonth()">›</button>
+          </div>
+        </div>
+        <div id="homeCalendar"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>💰 最近记账</span>
+          <span style="font-size:13px;color:var(--primary);font-weight:500" onclick="App.navigate('finance')">全部 ›</span>
+        </div>
+        <div id="homeFinance"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>📝 最近记事</span>
+          <span style="font-size:13px;color:var(--primary);font-weight:500" onclick="App.navigate('notes')">全部 ›</span>
+        </div>
+        <div id="homeNotes"></div>
+      </div>
+    </div>
+
+    <!-- ===== 记账页面 ===== -->
+    <div class="page" id="page-finance">
+      <div class="page-header">
+        <div class="page-title">💰 记账</div>
+        <div class="btn-icon" onclick="Finance.showSettlement()">清算</div>
+      </div>
+      <div class="ledger-selector" id="ledgerSelector"></div>
+      <div class="segment">
+        <div class="segment-item active" onclick="Finance.switchTab('list',this)">账目</div>
+        <div class="segment-item" onclick="Finance.switchTab('stats',this)">统计</div>
+        <div class="segment-item" onclick="Finance.switchTab('members',this)">成员</div>
+      </div>
+      <div id="financeContent"></div>
+      <div class="fab" onclick="Finance.showAddTransaction()">+</div>
+    </div>
+
+    <!-- ===== 打卡页面 ===== -->
+    <div class="page" id="page-habits">
+      <div class="page-header">
+        <div class="page-title">✅ 打卡</div>
+        <div class="btn-icon" onclick="Habits.showAddHabit()">+</div>
+      </div>
+      <div id="habitsList"></div>
+    </div>
+
+    <!-- ===== 记事页面 ===== -->
+    <div class="page" id="page-notes">
+      <div class="page-header">
+        <div class="page-title">📝 记事</div>
+        <div class="btn-icon" onclick="Notes.showAddNote()">+</div>
+      </div>
+      <input class="search-box" id="noteSearch" placeholder="搜索笔记..." oninput="Notes.render()">
+      <div class="chip-group" id="noteCatFilter" style="margin-bottom:12px;overflow-x:auto;flex-wrap:nowrap"></div>
+      <div id="notesList"></div>
+    </div>
+
+  </div>
+
+  <!-- ===== 底部导航 ===== -->
+  <div class="tab-bar">
+    <div class="tab-item active" onclick="App.navigate('home')">
+      <div class="icon">🏠</div><div class="label">工作台</div>
+    </div>
+    <div class="tab-item" onclick="App.navigate('finance')">
+      <div class="icon">💰</div><div class="label">记账</div>
+    </div>
+    <div class="tab-item" onclick="App.navigate('habits')">
+      <div class="icon">✅</div><div class="label">打卡</div>
+    </div>
+    <div class="tab-item" onclick="App.navigate('notes')">
+      <div class="icon">📝</div><div class="label">记事</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 底部弹出表单容器 ===== -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="App.closeSheet()"></div>
+<div class="sheet" id="sheet"></div>
+
+<!-- ===== 确认弹窗 ===== -->
+<div class="confirm-dialog" id="confirmDialog">
+  <div class="confirm-box">
+    <div class="confirm-text" id="confirmText"></div>
+    <div class="confirm-actions">
+      <button class="btn btn-secondary" onclick="App.confirmNo()">取消</button>
+      <button class="btn btn-danger" id="confirmYesBtn" onclick="App.confirmYes()">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+ *  数据层 - IndexedDB 封装
+ * ============================================================ */
+// 云端服务器地址：留空表示与前端同源；跨域（如本地文件访问本机服务）时填 http://localhost:3001 或 Render 网址
+function apiUrl(p) {
+  const base = (DB.apiBase || '').replace(/\/$/, '');
+  return base ? base + p : p;
+}
+
+const DB = {
+  db: null,
+  mode: 'local',
+  token: null,
+  DB_NAME: 'WorkbenchDB',
+  DB_VERSION: 2,
+  apiBase: (function () {
+    try {
+      const saved = localStorage.getItem('wb_apibase');
+      if (saved !== null && saved !== '') return saved;
+    } catch (e) {}
+    // 默认：本地文件打开→连本机服务；通过 http(s) 打开（如 Render 同源部署）→ 走同源
+    return (typeof location !== 'undefined' && location.protocol === 'file:') ? 'http://localhost:3001' : '';
+  })(),
+
+  setCloud(token) { this.mode = 'cloud'; this.token = token; },
+  setLocal() { this.mode = 'local'; this.token = null; },
+  setApiBase(v) {
+    this.apiBase = (v || '').trim();
+    try { localStorage.setItem('wb_apibase', this.apiBase); } catch (e) {}
+  },
+
+  async init() {
+    if (this.mode === 'cloud') return;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('ledgers')) {
+          db.createObjectStore('ledgers', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('transactions')) {
+          const store = db.createObjectStore('transactions', { keyPath: 'id' });
+          store.createIndex('ledgerId', 'ledgerId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('habits')) {
+          db.createObjectStore('habits', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('checkins')) {
+          const store = db.createObjectStore('checkins', { keyPath: 'id' });
+          store.createIndex('habitId', 'habitId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('categories')) {
+          db.createObjectStore('categories', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('notes')) {
+          const store = db.createObjectStore('notes', { keyPath: 'id' });
+          store.createIndex('categoryId', 'categoryId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('meta')) {
+          db.createObjectStore('meta', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('settlements')) {
+          const store = db.createObjectStore('settlements', { keyPath: 'id' });
+          store.createIndex('ledgerId', 'ledgerId', { unique: false });
+        }
+      };
+      req.onsuccess = (e) => { this.db = e.target.result; resolve(this.db); };
+      req.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  _tx(store, mode) { return this.db.transaction(store, mode).objectStore(store); },
+
+  async _api(method, url, body) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
+    const fullUrl = apiUrl(url);
+    const resp = await fetch(fullUrl, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    if (!resp.ok) {
+      let msg = '网络错误';
+      try { const e = await resp.json(); msg = e.error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    return resp.json();
+  },
+
+  async add(store, data) {
+    if (this.mode === 'cloud') return this._api('POST', `/api/${store}`, data);
+    return new Promise((resolve, reject) => {
+      const req = this._tx(store, 'readwrite').add(data);
+      req.onsuccess = () => resolve(data);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async put(store, data) {
+    if (this.mode === 'cloud') {
+      if (data && data.id) return this._api('PUT', `/api/${store}/${data.id}`, data);
+      return this._api('POST', `/api/${store}`, data);
+    }
+    return new Promise((resolve, reject) => {
+      const req = this._tx(store, 'readwrite').put(data);
+      req.onsuccess = () => resolve(data);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async get(store, id) {
+    if (this.mode === 'cloud') {
+      if (store === 'meta') return null;
+      return this._api('GET', `/api/${store}/${id}`);
+    }
+    return new Promise((resolve, reject) => {
+      const req = this._tx(store, 'readonly').get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async getAll(store) {
+    if (this.mode === 'cloud') {
+      if (store === 'meta') {
+        const obj = await this._api('GET', '/api/meta');
+        return Object.entries(obj || {}).map(([key, value]) => ({ key, value }));
+      }
+      return this._api('GET', `/api/${store}`);
+    }
+    return new Promise((resolve, reject) => {
+      const req = this._tx(store, 'readonly').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async delete(store, id) {
+    if (this.mode === 'cloud') return this._api('DELETE', `/api/${store}/${id}`);
+    return new Promise((resolve, reject) => {
+      const req = this._tx(store, 'readwrite').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async getByIndex(store, indexName, value) {
+    if (this.mode === 'cloud') {
+      const v = encodeURIComponent(value);
+      return this._api('GET', `/api/${store}?index=${indexName}&value=${v}`);
+    }
+    return new Promise((resolve, reject) => {
+      const req = this._tx(store, 'readonly').index(indexName).getAll(value);
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async getMeta(key, defaultVal) {
+    if (this.mode === 'cloud') {
+      const v = await this._api('GET', `/api/meta?key=${encodeURIComponent(key)}`);
+      return (v === null || v === undefined) ? defaultVal : v;
+    }
+    const r = await this.get('meta', key);
+    return r ? r.value : defaultVal;
+  },
+  async setMeta(key, value) {
+    if (this.mode === 'cloud') return this._api('POST', '/api/meta', { key, value });
+    return this.put('meta', { key, value });
+  },
+  async clearAll() {
+    const stores = ['ledgers','transactions','habits','checkins','categories','notes','meta'];
+    if (this.mode === 'cloud') {
+      for (const s of stores) {
+        const items = await this.getAll(s);
+        for (const it of items) {
+          if (it && it.id) await this.delete(s, it.id);
+        }
+      }
+      return;
+    }
+    for (const s of stores) {
+      await new Promise((resolve, reject) => {
+        const req = this._tx(s, 'readwrite').clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+  }
+};
+
+/* ============================================================
+ *  认证层 - 手机号 + 密码（云端账号）
+ * ============================================================ */
+// 带超时的登录/注册请求：服务器不可达时快速给出明确提示，避免「点击没反应」
+async function authFetch(url, body) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const r = await fetch(apiUrl(url), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: ctrl.signal
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || '请求失败'); }
+    return r.json();
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('连接服务器超时，请确认「服务端地址」已填写且服务已启动');
+    if (e.message) throw e;
+    throw new Error('无法连接服务器');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+const Auth = {
+  _tokenKey: 'wb_token',
+  _phoneKey: 'wb_phone',
+  get token() { return localStorage.getItem(this._tokenKey); },
+  get phone() { return localStorage.getItem(this._phoneKey); },
+  set(token, phone) { localStorage.setItem(this._tokenKey, token); localStorage.setItem(this._phoneKey, phone); },
+  clear() { localStorage.removeItem(this._tokenKey); localStorage.removeItem(this._phoneKey); },
+  async verify() {
+    const r = await fetch(apiUrl('/api/me'), { headers: { Authorization: 'Bearer ' + this.token } });
+    if (!r.ok) throw new Error('登录已过期，请重新登录');
+    return r.json();
+  },
+  async register(phone, password) {
+    return authFetch('/api/auth/register', { phone, password });
+  },
+  async login(phone, password) {
+    return authFetch('/api/auth/login', { phone, password });
+  }
+};
+
+/* ============================================================
+ *  工具函数
+ * ============================================================ */
+const Utils = {
+  uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
+
+  todayStr() { return new Date().toISOString().slice(0, 10); },
+
+  formatDate(date) {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+    if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+    const m = d.getMonth() + 1, day = d.getDate();
+    return `${m}月${day}日`;
+  },
+
+  formatDateTime(date) {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    const h = d.getHours().toString().padStart(2, '0');
+    const min = d.getMinutes().toString().padStart(2, '0');
+    return `${m}/${day} ${h}:${min}`;
+  },
+
+  formatTime(date) {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const h = d.getHours().toString().padStart(2, '0');
+    const min = d.getMinutes().toString().padStart(2, '0');
+    const s = d.getSeconds().toString().padStart(2, '0');
+    return `${h}:${min}:${s}`;
+  },
+
+  formatDateCN(date) {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    const h = d.getHours().toString().padStart(2, '0');
+    const min = d.getMinutes().toString().padStart(2, '0');
+    return `${m}月${day}日 ${h}:${min}`;
+  },
+
+  formatMoney(n) {
+    return '¥' + Number(n || 0).toFixed(2);
+  },
+
+  // 交易实际计入计算/统计的金额；未知金额按 0（即不参与清算）
+  txAmt(t) {
+    return t && t.amountUnknown ? 0 : (Number(t && t.amount) || 0);
+  },
+
+  weekDay() {
+    return ['日','一','二','三','四','五','六'][new Date().getDay()];
+  },
+
+  greeting() {
+    const h = new Date().getHours();
+    if (h < 6) return '夜深了';
+    if (h < 11) return '早上好';
+    if (h < 13) return '中午好';
+    if (h < 18) return '下午好';
+    if (h < 22) return '晚上好';
+    return '夜深了';
+  },
+
+  escape(s) {
+    const div = document.createElement('div');
+    div.textContent = s || '';
+    return div.innerHTML;
+  },
+
+  isSameDay(d1, d2) {
+    const a = typeof d1 === 'string' ? new Date(d1) : d1;
+    const b = typeof d2 === 'string' ? new Date(d2) : d2;
+    return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+  }
+};
+
+/* ============================================================
+ *  记账模块
+ * ============================================================ */
+const Finance = {
+  currentLedgerId: null,
+  currentTab: 'list',
+  ledgerColors: ['#00b894','#0984e3','#6c5ce7','#e17055','#fd79a8','#00cec9','#fdcb6e'],
+  txCategories: [
+    { name: '餐饮', icon: '🍔', color: 0 },
+    { name: '交通', icon: '🚗', color: 4 },
+    { name: '购物', icon: '🛒', color: 5 },
+    { name: '生活', icon: '🏠', color: 3 },
+    { name: '娱乐', icon: '🎮', color: 2 },
+    { name: '医疗', icon: '💊', color: 1 },
+    { name: '教育', icon: '📚', color: 2 },
+    { name: '其他', icon: '📦', color: 7 },
+  ],
+
+  async init() {
+    let ledgers = await DB.getAll('ledgers');
+    if (ledgers.length === 0) {
+      // 创建默认账本
+      const defaultLedger = {
+        id: Utils.uid(),
+        name: '日常账本',
+        members: ['我'],
+        createdAt: new Date().toISOString(),
+        color: 0
+      };
+      await DB.add('ledgers', defaultLedger);
+      ledgers = [defaultLedger];
+    }
+    this.currentLedgerId = await DB.getMeta('currentLedgerId', ledgers[0].id);
+    // 验证ledgerId是否有效
+    if (!ledgers.find(l => l.id === this.currentLedgerId)) {
+      this.currentLedgerId = ledgers[0].id;
+      await DB.setMeta('currentLedgerId', this.currentLedgerId);
+    }
+  },
+
+  async getCurrentLedger() {
+    return await DB.get('ledgers', this.currentLedgerId);
+  },
+
+  async render() {
+    await this.renderLedgerSelector();
+    await this.switchTab(this.currentTab);
+  },
+
+  async renderLedgerSelector() {
+    const ledgers = await DB.getAll('ledgers');
+    const el = document.getElementById('ledgerSelector');
+    el.innerHTML = ledgers.map(l => `
+      <div class="ledger-chip ${l.id === this.currentLedgerId ? 'active' : ''}" onclick="Finance.selectLedger('${l.id}')">${Utils.escape(l.name)}</div>
+    `).join('') + `<div class="ledger-chip" onclick="Finance.showAddLedger()" style="color:var(--text-light)">+ 新建</div>`;
+  },
+
+  async selectLedger(id) {
+    this.currentLedgerId = id;
+    await DB.setMeta('currentLedgerId', id);
+    this.render();
+  },
+
+  switchTab(tab, el) {
+    this.currentTab = tab;
+    if (el) {
+      document.querySelectorAll('#page-finance .segment-item').forEach(e => e.classList.remove('active'));
+      el.classList.add('active');
+    } else {
+      setTimeout(() => {
+        const items = document.querySelectorAll('#page-finance .segment-item');
+        items.forEach(e => e.classList.remove('active'));
+        if (tab === 'list') items[0]?.classList.add('active');
+        if (tab === 'stats') items[1]?.classList.add('active');
+        if (tab === 'members') items[2]?.classList.add('active');
+      }, 0);
+    }
+    if (tab === 'list') this.renderList();
+    else if (tab === 'stats') this.renderStats();
+    else if (tab === 'members') this.renderMembers();
+  },
+
+  async renderList() {
+    const ledger = await this.getCurrentLedger();
+    if (!ledger) return;
+    const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    txs.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const el = document.getElementById('financeContent');
+    if (txs.length === 0) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">💰</div><div class="text">还没有记账，点击右下角 + 开始</div></div>`;
+      return;
+    }
+
+    let html = '';
+    let lastDate = '';
+    for (const tx of txs) {
+      const txDate = tx.date.slice(0, 10);
+      if (txDate !== lastDate) {
+        const dayTx = txs.filter(t => t.date.slice(0, 10) === txDate);
+        const dayTotal = dayTx.reduce((s, t) => s + Utils.txAmt(t), 0);
+        html += `<div style="padding:12px 4px 4px;font-size:13px;color:var(--text-secondary);font-weight:600;display:flex;justify-content:space-between">
+          <span>${Utils.formatDate(txDate)}</span><span>共 ${Utils.formatMoney(dayTotal)}</span></div>`;
+        lastDate = txDate;
+      }
+      const cat = this.txCategories[tx.categoryIdx] || this.txCategories[7];
+      const payer = ledger.members[tx.payerIdx] || '?';
+      const amtHtml = tx.amountUnknown
+        ? `<span style="color:var(--warning)">未知</span>`
+        : Utils.formatMoney(tx.amount);
+      const settleTag = tx.settlementId
+        ? `<span style="font-size:11px;color:var(--success);border:1px solid var(--success);border-radius:4px;padding:0 4px;margin-left:4px">已清算</span>`
+        : '';
+      html += `
+        <div class="card" style="padding:14px 16px;margin-bottom:8px" onclick="Finance.showEditTransaction('${tx.id}')">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="list-item-icon icon-bg-${cat.color}">${cat.icon}</div>
+            <div class="list-item-content">
+              <div class="list-item-title">${Utils.escape(tx.note || cat.name)} <span style="font-size:12px;color:var(--text-light)">${cat.name}</span>${settleTag}</div>
+              <div class="list-item-sub">${Utils.escape(payer)} 付款 · ${tx.participantIdxs.length}人分摊</div>
+            </div>
+            <div class="list-item-right">
+              <div class="list-item-amount">${amtHtml}</div>
+              <div class="list-item-time">${Utils.formatTime(tx.date)}</div>
+            </div>
+          </div>
+        </div>`;
+    }
+    el.innerHTML = html;
+  },
+
+  async renderStats() {
+    const ledger = await this.getCurrentLedger();
+    if (!ledger) return;
+    const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+
+    // 总支出（未知金额不计入）
+    const total = txs.reduce((s, t) => s + Utils.txAmt(t), 0);
+    const unknownCount = txs.filter(t => t.amountUnknown).length;
+
+    // 按成员统计
+    const memberStats = ledger.members.map((m, i) => {
+      const paid = txs.filter(t => t.payerIdx === i).reduce((s, t) => s + Utils.txAmt(t), 0);
+      const shouldPay = txs.filter(t => t.participantIdxs.includes(i)).reduce((s, t) => {
+        if (t.splitType === 'equal') return s + Utils.txAmt(t) / t.participantIdxs.length;
+        return s + Utils.txAmt(t) * (t.splitRatios?.[i] || 0) / (Object.values(t.splitRatios || {}).reduce((a, b) => a + b, 0) || 1);
+      }, 0);
+      return { name: m, paid, shouldPay, balance: paid - shouldPay };
+    });
+
+    // 按分类统计
+    const catStats = {};
+    for (const tx of txs) {
+      const cat = this.txCategories[tx.categoryIdx] || this.txCategories[7];
+      if (!catStats[cat.name]) catStats[cat.name] = { total: 0, icon: cat.icon, color: cat.color };
+      catStats[cat.name].total += Utils.txAmt(tx);
+    }
+    const sortedCats = Object.entries(catStats).sort((a, b) => b[1].total - a[1].total);
+
+    let html = `
+      <div class="card" style="text-align:center">
+        <div style="font-size:13px;color:var(--text-secondary)">总支出</div>
+        <div style="font-size:32px;font-weight:700;margin:4px 0">${Utils.formatMoney(total)}</div>
+        <div style="font-size:13px;color:var(--text-light)">${txs.length} 笔记录${unknownCount > 0 ? ` · <span style="color:var(--warning)">${unknownCount} 笔未知</span>` : ''}</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">👥 成员余额</div>`;
+    for (const ms of memberStats) {
+      html += `
+        <div class="balance-card" style="box-shadow:none;padding:10px 0">
+          <div class="bc-name">${Utils.escape(ms.name)}</div>
+          <div style="text-align:right">
+            <div style="font-size:13px;color:var(--text-secondary)">已付 ${Utils.formatMoney(ms.paid)}</div>
+            <div class="bc-bal ${ms.balance >= 0 ? 'positive' : 'negative'}">${ms.balance >= 0 ? '应收回' : '应补'} ${Utils.formatMoney(Math.abs(ms.balance))}</div>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+
+    if (sortedCats.length > 0) {
+      html += `<div class="card"><div class="card-title">📊 分类统计</div>`;
+      for (const [name, data] of sortedCats) {
+        const pct = total > 0 ? (data.total / total * 100).toFixed(1) : 0;
+        html += `
+          <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span>${data.icon} ${Utils.escape(name)}</span>
+              <span style="font-weight:600">${Utils.formatMoney(data.total)} <span style="color:var(--text-light);font-weight:400">${pct}%</span></span>
+            </div>
+            <div style="height:6px;background:#f0f2f5;border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:var(--primary);border-radius:3px"></div>
+            </div>
+          </div>`;
+      }
+      html += `</div>`;
+    }
+
+    document.getElementById('financeContent').innerHTML = html;
+  },
+
+  async renderMembers() {
+    const ledger = await this.getCurrentLedger();
+    if (!ledger) return;
+
+    let html = `<div class="card">
+      <div class="card-title">
+        <span>👥 成员管理</span>
+        <button class="btn btn-sm btn-primary" onclick="Finance.showAddMember()">+ 添加</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);padding:2px 4px 10px">当前账本：<b style="color:var(--text)">${Utils.escape(ledger.name)}</b> · 成员仅属于该账本，与其他账本相互独立</div>`;
+    ledger.members.forEach((m, i) => {
+      html += `
+        <div class="list-item">
+          <div class="list-item-icon" style="background:var(--ledger-color,#f0f2f5);font-size:18px">👤</div>
+          <div class="list-item-content">
+            <div class="list-item-title">${Utils.escape(m)}</div>
+            <div class="list-item-sub">成员 ${i + 1}</div>
+          </div>
+          <div class="list-item-right">
+            <button class="btn btn-sm btn-secondary" onclick="Finance.showEditMember(${i})">编辑</button>
+            <button class="btn btn-sm btn-danger" style="margin-left:6px" onclick="Finance.removeMember(${i})">删除</button>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // 账本管理
+    const ledgers = await DB.getAll('ledgers');
+    html += `<div class="card">
+      <div class="card-title">
+        <span>📒 账本管理</span>
+        <button class="btn btn-sm btn-primary" onclick="Finance.showAddLedger()">+ 新建</button>
+      </div>`;
+    for (const l of ledgers) {
+      html += `
+        <div class="list-item">
+          <div class="list-item-icon" style="background:${this.ledgerColors[l.color||0]}20;color:${this.ledgerColors[l.color||0]}">📒</div>
+          <div class="list-item-content">
+            <div class="list-item-title">${Utils.escape(l.name)}</div>
+            <div class="list-item-sub">${l.members.length} 名成员：${l.members.map(m => Utils.escape(m)).join('、')}</div>
+          </div>
+          <div class="list-item-right">
+            <button class="btn btn-sm btn-danger" onclick="Finance.removeLedger('${l.id}')">删除</button>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+
+    document.getElementById('financeContent').innerHTML = html;
+  },
+
+  // ===== 清算（可勾选账目，已清算默认不勾选，可重选） =====
+  computeSettlement(txs, ledger) {
+    const balances = ledger.members.map((m, i) => {
+      const paid = txs.filter(t => t.payerIdx === i).reduce((s, t) => s + Utils.txAmt(t), 0);
+      const shouldPay = txs.filter(t => t.participantIdxs.includes(i)).reduce((s, t) => {
+        if (t.splitType === 'equal') return s + Utils.txAmt(t) / t.participantIdxs.length;
+        const ratioSum = Object.values(t.splitRatios || {}).reduce((a, b) => a + b, 0) || 1;
+        return s + Utils.txAmt(t) * (t.splitRatios?.[i] || 0) / ratioSum;
+      }, 0);
+      return { name: m, idx: i, balance: paid - shouldPay };
+    });
+    const debtors = balances.filter(b => b.balance < -0.01).sort((a, b) => a.balance - b.balance);
+    const creditors = balances.filter(b => b.balance > 0.01).sort((a, b) => b.balance - a.balance);
+    const transfers = [];
+    let di = 0, ci = 0, debtor = debtors[di], creditor = creditors[ci];
+    while (di < debtors.length && ci < creditors.length) {
+      const amount = Math.min(-debtor.balance, creditor.balance);
+      transfers.push({ from: debtor.name, to: creditor.name, amount });
+      debtor.balance += amount; creditor.balance -= amount;
+      if (Math.abs(debtor.balance) < 0.01) { di++; debtor = debtors[di]; }
+      if (Math.abs(creditor.balance) < 0.01) { ci++; creditor = creditors[ci]; }
+    }
+    return { balances, transfers };
+  },
+
+  _settleTxRow(t, ledger, checked, disabled) {
+    const cat = this.txCategories[t.categoryIdx] || this.txCategories[7];
+    const payer = ledger.members[t.payerIdx] || '?';
+    const cb = disabled
+      ? `<span style="display:inline-block;width:22px;text-align:center;font-size:12px;color:var(--warning)">未知</span>`
+      : `<input type="checkbox" class="settle-tx-check" data-tx-id="${t.id}" ${checked ? 'checked' : ''} onchange="Finance.recomputeSettlement()">`;
+    return `
+      <label class="settle-row" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border);${disabled ? 'opacity:.55' : ''}">
+        ${cb}
+        <div class="list-item-icon icon-bg-${cat.color}" style="margin:0">${cat.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escape(t.note || cat.name)}</div>
+          <div style="font-size:12px;color:var(--text-secondary)">${Utils.formatDate(t.date)} · ${Utils.escape(payer)}付</div>
+        </div>
+        <div style="font-weight:700;color:var(--text)">${t.amountUnknown ? '待定' : Utils.formatMoney(t.amount)}</div>
+      </label>`;
+  },
+
+  async showSettlement(ledgerId) {
+    const activeId = ledgerId || this.currentLedgerId;
+    const ledger = await DB.get('ledgers', activeId);
+    if (!ledger) { App.toast('未找到账本'); return; }
+    const ledgers = await DB.getAll('ledgers');
+    const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    if (txs.length === 0) { App.toast('当前账本暂无记账记录'); return; }
+
+    const known = txs.filter(t => !t.amountUnknown);
+    if (known.length === 0) { App.toast('当前账本暂无已确定金额的账目'); return; }
+
+    const settlements = await DB.getByIndex('settlements', 'ledgerId', ledger.id);
+    const settleById = {};
+    settlements.forEach(s => settleById[s.id] = s);
+
+    txs.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const unknownTxs = txs.filter(t => t.amountUnknown);
+    const settledTxs = known.filter(t => t.settlementId);
+    const openTxs = known.filter(t => !t.settlementId);
+
+    // 已清算按批次分组
+    const groups = {};
+    settledTxs.forEach(t => { (groups[t.settlementId] = groups[t.settlementId] || []).push(t); });
+    const groupKeys = Object.keys(groups).sort((a, b) => new Date(settleById[b].date) - new Date(settleById[a].date));
+
+    this._settleState = { ledger, txById: Object.fromEntries(txs.map(t => [t.id, t])) };
+
+    let html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">💰 清算</div>
+
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label">选择要清算的账本</label>
+        <select class="form-input" id="settleLedgerSelect" onchange="Finance.showSettlement(this.value)" style="font-size:15px">
+          ${ledgers.map(l => `<option value="${l.id}" ${l.id === ledger.id ? 'selected' : ''}>${Utils.escape(l.name)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:8px">勾选要参与本次清算的账目。<b>已清算过的默认不勾选</b>，如需再次清算可重新勾选。未确定金额的账目不参与清算。</div>
+    `;
+
+    if (openTxs.length > 0) {
+      html += `<div style="font-size:14px;font-weight:600;margin:8px 0 2px">📝 待清算 (${openTxs.length})</div>`;
+      html += `<div class="card" style="padding:0 12px">`;
+      openTxs.forEach(t => { html += this._settleTxRow(t, ledger, true, false); });
+      html += `</div>`;
+    }
+
+    if (unknownTxs.length > 0) {
+      html += `<div style="font-size:14px;font-weight:600;margin:12px 0 2px">⚠️ 金额未知 (${unknownTxs.length})</div>`;
+      html += `<div class="card" style="padding:0 12px">`;
+      unknownTxs.forEach(t => { html += this._settleTxRow(t, ledger, false, true); });
+      html += `</div>`;
+    }
+
+    if (groupKeys.length > 0) {
+      html += `<div style="font-size:14px;font-weight:600;margin:12px 0 2px">✅ 已清算 (${settledTxs.length})</div>`;
+      for (const key of groupKeys) {
+        const s = settleById[key];
+        const gtx = groups[key];
+        const gTotal = gtx.reduce((a, t) => a + Utils.txAmt(t), 0);
+        html += `
+          <div style="margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px">
+              <div style="font-size:13px;color:var(--text-secondary)">清算于 ${Utils.formatDateTime(s.date)} · ${gtx.length} 笔 · ${Utils.formatMoney(gTotal)}</div>
+              <button class="btn btn-sm btn-danger" onclick="Finance.revertSettlement('${s.id}')">撤销清算</button>
+            </div>
+            <div class="card" style="padding:0 12px">`;
+        gtx.forEach(t => { html += this._settleTxRow(t, ledger, false, false); });
+        html += `</div>
+            <div style="font-size:12px;color:var(--text-light);margin-top:4px">如需再次纳入清算，勾选上方账目后点「记录本次清算」即可</div>
+          </div>`;
+      }
+    }
+
+    html += `<div id="settleResult"></div>`;
+    html += `<div class="action-row" style="position:sticky;bottom:0;background:var(--bg);padding-top:8px">
+      <button class="btn btn-secondary" onclick="App.closeSheet()">关闭</button>
+      <button class="btn btn-primary" onclick="Finance.recordSettlement()">记录本次清算</button>
+    </div>`;
+    App.openSheet(html);
+    this.recomputeSettlement();
+  },
+
+  recomputeSettlement() {
+    const st = this._settleState;
+    if (!st) return;
+    const ids = [...document.querySelectorAll('.settle-tx-check:checked')].map(c => c.dataset.txId);
+    const sel = ids.map(id => st.txById[id]).filter(Boolean);
+    const { balances, transfers } = this.computeSettlement(sel, st.ledger);
+    const total = sel.reduce((a, t) => a + Utils.txAmt(t), 0);
+
+    let html = `<div style="font-size:14px;font-weight:600;margin:14px 0 6px">本次清算结果（已选 ${sel.length} 笔 · ${Utils.formatMoney(total)}）</div>`;
+    html += `<div class="card" style="margin-bottom:8px"><div class="card-title">成员余额</div>`;
+    balances.forEach(b => {
+      html += `
+        <div class="balance-card" style="box-shadow:none;padding:8px 0">
+          <div class="bc-name">${Utils.escape(b.name)}</div>
+          <div class="bc-bal ${b.balance >= 0 ? 'positive' : 'negative'}">${b.balance >= 0 ? '+' : ''}${Utils.formatMoney(b.balance)}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    if (sel.length === 0) {
+      html += `<div class="empty-state"><div class="icon">🤔</div><div class="text">请勾选要清算的账目</div></div>`;
+    } else if (transfers.length === 0) {
+      html += `<div class="empty-state"><div class="icon">✅</div><div class="text">已平衡，无需转账</div></div>`;
+    } else {
+      html += `<div style="font-size:14px;font-weight:600;margin-bottom:8px">建议转账：</div>`;
+      transfers.forEach(t => {
+        html += `
+          <div class="settlement-card" style="margin-bottom:8px">
+            <div class="sc-from">
+              <div class="sc-role">转出</div>
+              <div class="sc-name">${Utils.escape(t.from)}</div>
+            </div>
+            <div style="text-align:center">
+              <div class="sc-arrow">→</div>
+              <div class="sc-amount">${Utils.formatMoney(t.amount)}</div>
+            </div>
+            <div class="sc-to">
+              <div class="sc-role">转入</div>
+              <div class="sc-name">${Utils.escape(t.to)}</div>
+            </div>
+          </div>`;
+      });
+    }
+    const el = document.getElementById('settleResult');
+    if (el) el.innerHTML = html;
+  },
+
+  async recordSettlement() {
+    const st = this._settleState;
+    if (!st) return;
+    const ids = [...document.querySelectorAll('.settle-tx-check:checked')].map(c => c.dataset.txId);
+    if (ids.length === 0) { App.toast('请至少勾选一笔账目'); return; }
+    const sel = ids.map(id => st.txById[id]).filter(Boolean);
+    const { transfers } = this.computeSettlement(sel, st.ledger);
+    const total = sel.reduce((a, t) => a + Utils.txAmt(t), 0);
+    const sid = Utils.uid();
+    for (const t of sel) {
+      t.settlementId = sid;
+      await DB.put('transactions', t);
+    }
+    await DB.add('settlements', {
+      id: sid, ledgerId: st.ledger.id, date: new Date().toISOString(),
+      txIds: ids, transfers, total
+    });
+    App.closeSheet();
+    App.toast('已记录清算');
+    this.render();
+    Home.render();
+  },
+
+  async revertSettlement(sid) {
+    App.confirm('撤销后这笔清算批次里的账目会恢复为「未清算」，确定？', async () => {
+      const st = this._settleState;
+      if (!st) return;
+      const txs = await DB.getByIndex('transactions', 'ledgerId', st.ledger.id);
+      for (const t of txs) {
+        if (t.settlementId === sid) {
+          delete t.settlementId;
+          await DB.put('transactions', t);
+        }
+      }
+      await DB.delete('settlements', sid);
+      App.toast('已撤销清算');
+      this.showSettlement(st.ledger.id);
+      this.render();
+      Home.render();
+    });
+  },
+
+  // ===== 添加/编辑账目 =====
+  showAddTransaction() {
+    this._renderTxForm(null);
+  },
+
+  async showEditTransaction(id) {
+    const tx = await DB.get('transactions', id);
+    this._renderTxForm(tx);
+  },
+
+  async _renderTxForm(editTx) {
+    const ledger = await this.getCurrentLedger();
+    if (!ledger) return;
+
+    const isEdit = !!editTx;
+    const tx = editTx || {
+      amount: '', categoryIdx: 0, payerIdx: 0,
+      participantIdxs: ledger.members.map((_, i) => i),
+      splitType: 'equal', splitRatios: {}, note: '', date: new Date().toISOString(),
+      amountUnknown: false
+    };
+
+    // 时间选择框默认值（本地时间，datetime-local 格式）
+    const d0 = new Date(tx.date || new Date().toISOString());
+    const pad = n => String(n).padStart(2, '0');
+    const defTimeVal = `${d0.getFullYear()}-${pad(d0.getMonth() + 1)}-${pad(d0.getDate())}T${pad(d0.getHours())}:${pad(d0.getMinutes())}`;
+
+    let html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${isEdit ? '编辑账目' : '记一笔'}</div>
+
+      <div class="form-group">
+        <label class="form-label">金额</label>
+        <div class="segment" style="margin-bottom:8px">
+          <div class="segment-item ${!tx.amountUnknown ? 'active' : ''}" onclick="Finance.toggleAmountUnknown(false, this)">已确定金额</div>
+          <div class="segment-item ${tx.amountUnknown ? 'active' : ''}" onclick="Finance.toggleAmountUnknown(true, this)">金额未知</div>
+        </div>
+        <input class="form-input" type="number" id="txAmount" placeholder="0.00" step="0.01" value="${tx.amountUnknown ? '' : (tx.amount || '')}" ${tx.amountUnknown ? 'disabled' : ''} style="font-size:24px;font-weight:700;text-align:center">
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">选「金额未知」可先记账，稍后补全金额再清算</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">分类</label>
+        <div class="chip-group">
+          ${this.txCategories.map((c, i) => `
+            <div class="chip ${tx.categoryIdx === i ? 'active' : ''}" onclick="App.selectChip(this, 'txCategory', ${i})" data-idx="${i}">${c.icon} ${c.name}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">备注</label>
+        <input class="form-input" id="txNote" placeholder="写点什么..." value="${Utils.escape(tx.note || '')}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">付款人</label>
+        <div class="chip-group">
+          ${ledger.members.map((m, i) => `
+            <div class="chip ${tx.payerIdx === i ? 'active' : ''}" onclick="App.selectChip(this, 'txPayer', ${i})" data-idx="${i}">${Utils.escape(m)}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">参与人（分摊）</label>
+        <div class="chip-group" id="txParticipants">
+          ${ledger.members.map((m, i) => `
+            <div class="member-chip ${tx.participantIdxs.includes(i) ? 'active' : ''}" onclick="App.toggleParticipant(this, ${i})" data-idx="${i}">
+              ${Utils.escape(m)} <span class="check">${tx.participantIdxs.includes(i) ? '✓' : ''}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">分摊方式</label>
+        <div class="segment" style="margin-bottom:0">
+          <div class="segment-item ${tx.splitType === 'equal' ? 'active' : ''}" onclick="Finance.selectSplitType('equal',this)">平均分摊</div>
+          <div class="segment-item ${tx.splitType === 'custom' ? 'active' : ''}" onclick="Finance.selectSplitType('custom',this)">自定义比例</div>
+        </div>
+      </div>
+
+      <div class="form-group" id="splitRatioArea" style="display:${tx.splitType === 'custom' ? 'block' : 'none'}">
+        <label class="form-label">分摊比例（仅参与人）</label>
+        <div id="splitRatioList">
+          ${(tx.participantIdxs && tx.participantIdxs.length ? tx.participantIdxs : []).map(i => `
+            <div class="split-ratio-row">
+              <span class="sr-name">${Utils.escape(ledger.members[i] || '?')}</span>
+              <input type="number" value="${tx.splitRatios?.[i] ?? ''}" placeholder="0" step="0.1" data-member-idx="${i}" oninput="Finance.updateSplitRatio()">
+              <span class="sr-unit">份</span>
+            </div>
+          `).join('')}
+          ${(!tx.participantIdxs || tx.participantIdxs.length === 0) ? '<div style="font-size:13px;color:var(--text-light)">请先在上方选择参与人</div>' : ''}
+        </div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">按比例分配，仅参与人之间分摊，无需加起来等于某个数</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">记账时间</label>
+        <input class="form-input" type="datetime-local" id="txDate" value="${defTimeVal}" style="font-size:16px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">默认定为当前时间，可手动修改</div>
+      </div>
+
+      <div class="action-row">
+        ${isEdit ? '<button class="btn btn-danger" onclick="Finance.deleteTransaction(\'' + tx.id + '\')">删除</button>' : ''}
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Finance.saveTransaction(${isEdit ? `'${tx.id}'` : 'null'})">保存</button>
+      </div>
+    `;
+
+    App.openSheet(html);
+    // 保存当前表单状态
+    this._formLedger = ledger;
+    this._formState = { categoryIdx: tx.categoryIdx, payerIdx: tx.payerIdx, participantIdxs: [...tx.participantIdxs], splitType: tx.splitType, amountUnknown: !!tx.amountUnknown, splitRatios: { ...(tx.splitRatios || {}) } };
+  },
+
+  _formState: { categoryIdx: 0, payerIdx: 0, participantIdxs: [], splitType: 'equal', amountUnknown: false },
+
+  selectSplitType(type, el) {
+    this._formState.splitType = type;
+    el.parentElement.querySelectorAll('.segment-item').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('splitRatioArea').style.display = type === 'custom' ? 'block' : 'none';
+  },
+
+  toggleAmountUnknown(unknown, el) {
+    this._formState.amountUnknown = unknown;
+    el.parentElement.querySelectorAll('.segment-item').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    const inp = document.getElementById('txAmount');
+    if (inp) {
+      inp.disabled = unknown;
+      if (unknown) inp.value = '';
+    }
+  },
+
+  async saveTransaction(editId) {
+    const fs = this._formState;
+    const ledger = await this.getCurrentLedger();
+    const note = document.getElementById('txNote').value.trim();
+    const unknown = !!fs.amountUnknown;
+
+    // 记账时间（用户可改；空则默认当前）
+    const dateEl = document.getElementById('txDate');
+    const date = (dateEl && dateEl.value) ? new Date(dateEl.value).toISOString() : new Date().toISOString();
+
+    let amount = 0;
+    if (!unknown) {
+      amount = parseFloat(document.getElementById('txAmount').value);
+      if (!amount || amount <= 0) { App.toast('请输入金额'); return; }
+    }
+
+    if (fs.participantIdxs.length === 0) { App.toast('请选择参与人'); return; }
+
+    let splitRatios = {};
+    if (fs.splitType === 'custom') {
+      const inputs = document.querySelectorAll('#splitRatioList input');
+      inputs.forEach(inp => {
+        const idx = parseInt(inp.dataset.memberIdx);
+        const val = parseFloat(inp.value);
+        if (val && val > 0 && fs.participantIdxs.includes(idx)) splitRatios[idx] = val;
+      });
+      if (Object.keys(splitRatios).length === 0) { App.toast('请填写分摊比例'); return; }
+    }
+
+    // 编辑时保留原有的清算标记，未知/已知切换不清除已清算状态
+    const existing = editId ? await DB.get('transactions', editId) : null;
+
+    const txData = {
+      id: editId || Utils.uid(),
+      ledgerId: ledger.id,
+      amount,
+      amountUnknown: unknown,
+      categoryIdx: fs.categoryIdx,
+      payerIdx: fs.payerIdx,
+      participantIdxs: fs.participantIdxs,
+      splitType: fs.splitType,
+      splitRatios,
+      note,
+      date,
+      settlementId: existing ? (existing.settlementId || null) : null
+    };
+
+    await DB.put('transactions', txData);
+    App.closeSheet();
+    App.toast(editId ? '已更新' : '已记账');
+    this.render();
+    Home.render();
+  },
+
+  async deleteTransaction(id) {
+    App.confirm('确定删除这条记录？', async () => {
+      await DB.delete('transactions', id);
+      App.closeSheet();
+      App.toast('已删除');
+      this.render();
+      Home.render();
+    });
+  },
+
+  // ===== 账本管理 =====
+  async showAddLedger() {
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">新建账本</div>
+      <div class="form-group">
+        <label class="form-label">账本名称</label>
+        <input class="form-input" id="ledgerName" placeholder="如：旅行账本、家庭账本">
+      </div>
+      <div class="form-group">
+        <label class="form-label">成员（用逗号分隔）</label>
+        <input class="form-input" id="ledgerMembers" placeholder="如：我,小明,小红">
+      </div>
+      <div class="form-group">
+        <label class="form-label">颜色</label>
+        <div class="chip-group">
+          ${this.ledgerColors.map((c, i) => `
+            <div class="chip" onclick="App.selectChip(this,'ledgerColor',${i})" data-idx="${i}" style="${i===0?'background:'+c+';color:#fff':''}">
+              <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${c}"></span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Finance.saveLedger()">创建</button>
+      </div>
+    `;
+    this._newLedgerColor = 0;
+    App.openSheet(html);
+  },
+
+  async saveLedger() {
+    const name = document.getElementById('ledgerName').value.trim();
+    const membersStr = document.getElementById('ledgerMembers').value.trim();
+    if (!name) { App.toast('请输入账本名称'); return; }
+    const members = membersStr ? membersStr.split(/[,，]/).map(s => s.trim()).filter(Boolean) : ['我'];
+    if (members.length === 0) members.push('我');
+
+    const ledger = {
+      id: Utils.uid(),
+      name,
+      members,
+      color: this._newLedgerColor || 0,
+      createdAt: new Date().toISOString()
+    };
+    await DB.add('ledgers', ledger);
+    await this.selectLedger(ledger.id);
+    App.closeSheet();
+    App.toast('账本已创建');
+  },
+
+  async removeLedger(id) {
+    const ledgers = await DB.getAll('ledgers');
+    if (ledgers.length <= 1) { App.toast('至少保留一个账本'); return; }
+    App.confirm('删除账本将同时删除其所有记录，确定？', async () => {
+      await DB.delete('ledgers', id);
+      const txs = await DB.getByIndex('transactions', 'ledgerId', id);
+      for (const t of txs) await DB.delete('transactions', t.id);
+      if (this.currentLedgerId === id) {
+        this.currentLedgerId = ledgers.find(l => l.id !== id).id;
+        await DB.setMeta('currentLedgerId', this.currentLedgerId);
+      }
+      App.toast('已删除');
+      this.render();
+    });
+  },
+
+  // ===== 成员管理 =====
+  async showAddMember() {
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">添加成员</div>
+      <div class="form-group">
+        <label class="form-label">成员名称</label>
+        <input class="form-input" id="memberName" placeholder="输入名称">
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Finance.saveMember()">添加</button>
+      </div>
+    `;
+    App.openSheet(html);
+  },
+
+  async showEditMember(idx) {
+    const ledger = await this.getCurrentLedger();
+    const name = ledger.members[idx];
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">编辑成员</div>
+      <div class="form-group">
+        <label class="form-label">成员名称</label>
+        <input class="form-input" id="memberName" value="${Utils.escape(name)}">
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Finance.saveMember(${idx})">保存</button>
+      </div>
+    `;
+    App.openSheet(html);
+  },
+
+  async saveMember(editIdx) {
+    const name = document.getElementById('memberName').value.trim();
+    if (!name) { App.toast('请输入名称'); return; }
+    const ledger = await this.getCurrentLedger();
+    if (editIdx !== undefined) {
+      ledger.members[editIdx] = name;
+    } else {
+      ledger.members.push(name);
+    }
+    await DB.put('ledgers', ledger);
+    App.closeSheet();
+    App.toast('已保存');
+    this.render();
+  },
+
+  async removeMember(idx) {
+    const ledger = await this.getCurrentLedger();
+    if (ledger.members.length <= 1) { App.toast('至少保留一个成员'); return; }
+    App.confirm(`确定删除成员"${ledger.members[idx]}"？相关账目可能受影响。`, async () => {
+      ledger.members.splice(idx, 1);
+      // 调整已有交易中的索引
+      const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+      for (const tx of txs) {
+        if (tx.payerIdx === idx) tx.payerIdx = 0;
+        else if (tx.payerIdx > idx) tx.payerIdx--;
+        tx.participantIdxs = tx.participantIdxs.filter(i => i !== idx).map(i => i > idx ? i - 1 : i);
+        if (tx.splitRatios) {
+          const newRatios = {};
+          for (const [k, v] of Object.entries(tx.splitRatios)) {
+            const ki = parseInt(k);
+            if (ki === idx) continue;
+            newRatios[ki > idx ? ki - 1 : ki] = v;
+          }
+          tx.splitRatios = newRatios;
+        }
+        await DB.put('transactions', tx);
+      }
+      await DB.put('ledgers', ledger);
+      App.toast('已删除');
+      this.render();
+    });
+  }
+};
+
+/* ============================================================
+ *  打卡模块
+ * ============================================================ */
+const Habits = {
+  habitIcons: ['💧','🏃','📚','💊','🌅','🧘','💪','✍️','🎸','🥗','😴','🚭','🦷','🧹','📞','💡'],
+  habitColors: ['#74b9ff','#00cec9','#55efc4','#fdcb6e','#fab1a0','#fd79a8','#a29bfe','#dfe6e9'],
+
+  async init() {
+    let habits = await DB.getAll('habits');
+    const defaults = [
+      { name: '喝水', icon: '💧', color: 0, recordType: 'number', unit: '杯', target: 8 },
+      { name: '跑步', icon: '🏃', color: 1, recordType: 'both', unit: '公里', target: null },
+      { name: '阅读', icon: '📚', color: 2, recordType: 'text', unit: '', target: null },
+      { name: '拉屎', icon: '💩', color: 1, recordType: 'text', unit: '', target: null },
+    ];
+    if (habits.length === 0) {
+      // 全新安装：创建全部默认打卡项目
+      for (const d of defaults) {
+        await DB.add('habits', { id: Utils.uid(), ...d, createdAt: new Date().toISOString() });
+      }
+      await DB.setMeta('defaultHabitsAdded', true);
+    } else {
+      // 已初始化但可能缺默认项：补全一次（不覆盖用户自定义项）
+      const added = await DB.getMeta('defaultHabitsAdded', false);
+      if (!added) {
+        const hasPoop = habits.some(h => h.name === '拉屎' || h.icon === '💩');
+        if (!hasPoop) {
+          await DB.add('habits', { id: Utils.uid(), name: '拉屎', icon: '💩', color: 1, recordType: 'text', unit: '', target: null, createdAt: new Date().toISOString() });
+        }
+        await DB.setMeta('defaultHabitsAdded', true);
+      }
+    }
+
+    // 确保“奶茶”等常见打卡项存在（不覆盖用户自定义，刷新即获得）
+    const hasMilk = habits.some(h => h.name === '奶茶' || h.icon === '🧋');
+    if (!hasMilk) {
+      await DB.add('habits', { id: Utils.uid(), name: '奶茶', icon: '🧋', color: 3, recordType: 'number', unit: '杯', target: null, createdAt: new Date().toISOString() });
+    }
+
+    // 确保“游泳”打卡项存在，并区分「游泳课程」与「日常游泳」（两个独立项，统计/趋势各自分开）
+    const ensureHabits = [
+      { name: '游泳课程', icon: '🏊', color: 4, recordType: 'both', unit: '课时', target: null },
+      { name: '日常游泳', icon: '🏊', color: 5, recordType: 'both', unit: '分钟', target: null },
+    ];
+    for (const h of ensureHabits) {
+      const exists = habits.some(x => x.name === h.name);
+      if (!exists) {
+        await DB.add('habits', { id: Utils.uid(), ...h, createdAt: new Date().toISOString() });
+      }
+    }
+  },
+
+  async render() {
+    const habits = await DB.getAll('habits');
+    const el = document.getElementById('habitsList');
+    if (habits.length === 0) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">✅</div><div class="text">还没有打卡项目，点击右上角 + 创建</div></div>`;
+      return;
+    }
+
+    // 获取今日打卡
+    const today = Utils.todayStr();
+    let html = '';
+    for (const h of habits) {
+      const checkins = await DB.getByIndex('checkins', 'habitId', h.id);
+      const todayCheckins = checkins.filter(c => c.timestamp.slice(0, 10) === today);
+      const done = todayCheckins.length > 0;
+      const streak = this._calcStreak(checkins);
+
+      let info = '';
+      if (h.recordType === 'number' || h.recordType === 'both') {
+        if (h.target) {
+          const todayVal = todayCheckins.reduce((s, c) => s + (c.value || 0), 0);
+          info = `今日 ${todayVal}/${h.target} ${h.unit || ''}`;
+        } else {
+          info = `今日 ${todayCheckins.reduce((s, c) => s + (c.value || 0), 0)} ${h.unit || ''}`;
+        }
+      } else {
+        info = done ? '今日已打卡' : '今日未打卡';
+      }
+
+      html += `
+        <div class="habit-card">
+          <div class="hc-icon icon-bg-${h.color % 8}" onclick="Habits.showDetail('${h.id}')">${h.icon}</div>
+          <div class="hc-body" onclick="Habits.showDetail('${h.id}')">
+            <div class="hc-name">${Utils.escape(h.name)}</div>
+            <div class="hc-info">${info}</div>
+            ${streak > 0 ? `<div class="hc-streak">🔥 连续 ${streak} 天</div>` : ''}
+          </div>
+          <div class="hc-actions">
+            <div class="hc-btn ${done ? 'done' : ''}" onclick="Habits.${done ? 'cancelToday' : 'quickCheckin'}('${h.id}')" ${done ? 'title="点击取消今日打卡"' : ''}>${done ? '✓ 已打卡' : '打卡'}</div>
+            <div class="hc-del" onclick="Habits.deleteHabit('${h.id}')" title="删除此打卡项">🗑</div>
+          </div>
+        </div>
+      `;
+    }
+    el.innerHTML = html;
+  },
+
+  _calcStreak(checkins) {
+    if (checkins.length === 0) return 0;
+    const dates = [...new Set(checkins.map(c => c.timestamp.slice(0, 10)))].sort().reverse();
+    if (dates.length === 0) return 0;
+    let streak = 0;
+    let checkDate = new Date();
+    for (let i = 0; i < 365; i++) {
+      const ds = checkDate.toISOString().slice(0, 10);
+      if (dates.includes(ds)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else if (i === 0) {
+        // 今天没打卡，看昨天
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  },
+
+  async quickCheckin(habitId) {
+    const habit = await DB.get('habits', habitId);
+    if (!habit) return;
+
+    if (habit.recordType === 'text' || habit.recordType === 'both') {
+      // 需要弹出表单
+      this._showCheckinForm(habit);
+    } else {
+      // 纯数值或无数据，也弹表单
+      this._showCheckinForm(habit);
+    }
+  },
+
+  _showCheckinForm(habit) {
+    const isNumber = habit.recordType === 'number' || habit.recordType === 'both';
+    const isText = habit.recordType === 'text' || habit.recordType === 'both';
+
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${habit.icon} ${Utils.escape(habit.name)}</div>
+      <div style="text-align:center;font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+        打卡时间：${Utils.formatDateTime(new Date())}
+      </div>
+      ${isNumber ? `
+        <div class="form-group">
+          <label class="form-label">数值${habit.unit ? '（' + habit.unit + '）' : ''}</label>
+          <input class="form-input" type="number" id="checkinValue" placeholder="输入数值" step="0.1" style="font-size:22px;text-align:center">
+        </div>
+      ` : ''}
+      ${isText ? `
+        <div class="form-group">
+          <label class="form-label">备注</label>
+          <textarea class="form-textarea" id="checkinNote" placeholder="写点什么..."></textarea>
+        </div>
+      ` : ''}
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Habits.saveCheckin('${habit.id}')">打卡</button>
+      </div>
+    `;
+    App.openSheet(html);
+  },
+
+  async saveCheckin(habitId) {
+    const habit = await DB.get('habits', habitId);
+    const valueInput = document.getElementById('checkinValue');
+    const noteInput = document.getElementById('checkinNote');
+    const value = valueInput ? parseFloat(valueInput.value) : null;
+    const note = noteInput ? noteInput.value.trim() : '';
+
+    if ((habit.recordType === 'number' || habit.recordType === 'both') && (!value || value <= 0)) {
+      if (!note && !value) { App.toast('请填写数据'); return; }
+    }
+
+    const checkin = {
+      id: Utils.uid(),
+      habitId,
+      value: value || null,
+      note,
+      timestamp: new Date().toISOString()
+    };
+    await DB.add('checkins', checkin);
+    App.closeSheet();
+    App.toast('打卡成功！');
+    this.render();
+    Home.render();
+  },
+
+  async deleteCheckin(checkinId, habitId) {
+    App.confirm('撤销本次打卡？', async () => {
+      await DB.delete('checkins', checkinId);
+      App.toast('已撤销');
+      this.showDetail(habitId); // 刷新详情（含历史与统计）
+      Home.render();
+    });
+  },
+
+  // 取消今天的打卡（删除今天最近一次记录）
+  async cancelToday(habitId) {
+    const checkins = await DB.getByIndex('checkins', 'habitId', habitId);
+    const today = Utils.todayStr();
+    const todayC = checkins
+      .filter(c => c.timestamp.slice(0, 10) === today)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    if (todayC.length === 0) { App.toast('今天还没有打卡'); return; }
+    App.confirm('取消今天的这次打卡？', async () => {
+      await DB.delete('checkins', todayC[0].id);
+      App.toast('已取消今日打卡');
+      this.render();
+      Home.render();
+    });
+  },
+
+  async showDetail(habitId) {
+    const habit = await DB.get('habits', habitId);
+    if (!habit) return;
+    const checkins = await DB.getByIndex('checkins', 'habitId', habitId);
+    checkins.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    const streak = this._calcStreak(checkins);
+    const total = checkins.length;
+
+    let html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${habit.icon} ${Utils.escape(habit.name)}</div>
+
+      <div class="stat-grid" style="margin-bottom:16px">
+        <div class="stat-card" style="text-align:center">
+          <div class="stat-label">连续打卡</div>
+          <div class="stat-value" style="color:var(--orange)">🔥 ${streak}</div>
+          <div class="stat-sub">天</div>
+        </div>
+        <div class="stat-card" style="text-align:center">
+          <div class="stat-label">累计打卡</div>
+          <div class="stat-value">${total}</div>
+          <div class="stat-sub">次</div>
+        </div>
+      </div>
+    `;
+
+    // 趋势图
+    if ((habit.recordType === 'number' || habit.recordType === 'both') && checkins.length > 0) {
+      const recent = checkins.slice(0, 30).reverse();
+      const svg = this._renderChart(recent, habit);
+      html += `<div class="card"><div class="card-title">📈 趋势</div><div class="chart-container">${svg}</div></div>`;
+    }
+
+    // 历史记录
+    if (checkins.length > 0) {
+      html += `<div class="card"><div class="card-title">📋 打卡历史</div>`;
+      const recent30 = checkins.slice(0, 30);
+      for (const c of recent30) {
+        let valStr = '';
+        if (c.value !== null && c.value !== undefined) {
+          valStr = `<div class="ci-value">${c.value} ${habit.unit || ''}</div>`;
+        }
+        html += `
+          <div class="checkin-item" style="cursor:pointer" onclick="Habits.deleteCheckin('${c.id}','${habit.id}')" title="点击撤销本次打卡">
+            ${valStr}
+            <div class="ci-note">${(c.note && c.note !== '补卡') ? Utils.escape(c.note) : '<span style="color:var(--text-light)">无备注</span>'}</div>
+            <div style="text-align:right">
+              <div class="ci-time">${Utils.formatDateTime(c.timestamp)}</div>
+              <div style="font-size:11px;color:var(--danger);margin-top:2px">点击撤销</div>
+            </div>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    html += `
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="Habits.showEditHabit('${habit.id}')">编辑</button>
+        <button class="btn btn-secondary" onclick="Habits.showBulkCheckin('${habit.id}')">批量补卡</button>
+        <button class="btn btn-primary" onclick="App.closeSheet();setTimeout(()=>Habits.quickCheckin('${habit.id}'),300)">打卡</button>
+      </div>
+    `;
+    App.openSheet(html);
+  },
+
+  showBulkCheckin(habitId) {
+    const curYear = new Date().getFullYear();
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">📅 批量补打卡</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">每行或空格分隔，格式 <b>月/日</b>（如 5/12）。已存在该天的打卡会自动跳过，不会重复。</div>
+      <div class="form-group">
+        <label class="form-label">年份</label>
+        <input class="form-input" id="bulkYear" type="number" value="${curYear}" style="max-width:120px">
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期列表</label>
+        <textarea id="bulkDates" class="form-input" rows="6" style="width:100%;font-size:15px;line-height:1.6" placeholder="5/12 5/14 6/4 ...">5/12 5/14 6/4 6/19 6/30 7/2 7/3 7/6 7/9 7/10</textarea>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Habits.saveBulkCheckin('${habitId}')">确认补卡</button>
+      </div>
+    `;
+    App.openSheet(html);
+  },
+
+  async saveBulkCheckin(habitId) {
+    const habit = await DB.get('habits', habitId);
+    const year = parseInt(document.getElementById('bulkYear').value) || new Date().getFullYear();
+    const raw = document.getElementById('bulkDates').value;
+    const tokens = raw.split(/[\s,，、]+/).filter(Boolean);
+    const existing = await DB.getByIndex('checkins', 'habitId', habitId);
+    const existingDays = new Set(existing.map(c => c.timestamp.slice(0, 10)));
+    let added = 0, skipped = 0, invalid = 0;
+    const toAdd = [];
+    for (const t of tokens) {
+      const m = t.trim().match(/^(\d{1,2})\/(\d{1,2})$/);
+      if (!m) { invalid++; continue; }
+      const mo = parseInt(m[1]), da = parseInt(m[2]);
+      const dt = new Date(year, mo - 1, da, 12, 0, 0);
+      if (dt.getFullYear() !== year || dt.getMonth() !== mo - 1 || dt.getDate() !== da) { invalid++; continue; }
+      const dayStr = `${year}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
+      if (existingDays.has(dayStr)) { skipped++; continue; }
+      toAdd.push({ id: Utils.uid(), habitId, value: null, note: '', timestamp: dt.toISOString() });
+      existingDays.add(dayStr);
+      added++;
+    }
+    for (const c of toAdd) await DB.add('checkins', c);
+    App.closeSheet();
+    let msg = `已补 ${added} 条`;
+    if (skipped) msg += `，跳过 ${skipped} 条已存在`;
+    if (invalid) msg += `，${invalid} 条格式有误`;
+    App.toast(msg);
+    this.render();
+    Home.render();
+    this.showDetail(habitId);
+  },
+
+  _renderChart(checkins, habit) {
+    const data = checkins.map(c => ({ value: c.value || 0, date: c.timestamp.slice(0, 10) }));
+    if (data.length === 0) return '<div style="text-align:center;color:var(--text-light);padding:20px">暂无数据</div>';
+
+    const width = Math.max(data.length * 40, 300);
+    const height = 160;
+    const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
+
+    const maxVal = Math.max(...data.map(d => d.value), habit.target || 0, 1);
+    const minVal = 0;
+
+    const points = data.map((d, i) => {
+      const x = padding.left + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
+      const y = padding.top + chartH - ((d.value - minVal) / (maxVal - minVal)) * chartH;
+      return { x, y, ...d };
+    });
+
+    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${padding.top + chartH} L ${points[0].x.toFixed(1)} ${padding.top + chartH} Z`;
+
+    // Y轴刻度
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => {
+      const val = minVal + (maxVal - minVal) * t;
+      const y = padding.top + chartH - t * chartH;
+      return { val, y };
+    });
+
+    let svg = `<svg class="chart-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+    // 网格线
+    for (const t of yTicks) {
+      svg += `<line x1="${padding.left}" y1="${t.y}" x2="${width - padding.right}" y2="${t.y}" stroke="#f0f2f5" stroke-width="1"/>`;
+      svg += `<text x="${padding.left - 5}" y="${t.y + 4}" text-anchor="end" font-size="10" fill="#b2bec3">${t.val.toFixed(1)}</text>`;
+    }
+    // 目标线
+    if (habit.target) {
+      const ty = padding.top + chartH - ((habit.target - minVal) / (maxVal - minVal)) * chartH;
+      svg += `<line x1="${padding.left}" y1="${ty}" x2="${width - padding.right}" y2="${ty}" stroke="#fdcb6e" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${width - padding.right}" y="${ty - 4}" text-anchor="end" font-size="10" fill="#fdcb6e">目标 ${habit.target}</text>`;
+    }
+    // 区域
+    svg += `<path d="${areaD}" fill="rgba(0,184,148,0.1)"/>`;
+    // 折线
+    svg += `<path d="${pathD}" fill="none" stroke="#00b894" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    // 数据点
+    for (const p of points) {
+      svg += `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#00b894" stroke="#fff" stroke-width="1.5"/>`;
+    }
+    // X轴标签（只显示部分）
+    const labelStep = Math.ceil(data.length / 6);
+    for (let i = 0; i < data.length; i += labelStep) {
+      const p = points[i];
+      const d = new Date(data[i].date);
+      const label = `${d.getMonth()+1}/${d.getDate()}`;
+      svg += `<text x="${p.x}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#b2bec3">${label}</text>`;
+    }
+    svg += `</svg>`;
+    return svg;
+  },
+
+  showAddHabit() {
+    this._renderHabitForm(null);
+  },
+
+  async showEditHabit(id) {
+    const habit = await DB.get('habits', id);
+    this._renderHabitForm(habit);
+  },
+
+  _renderHabitForm(editHabit) {
+    const isEdit = !!editHabit;
+    const h = editHabit || { name: '', icon: '✅', color: 0, recordType: 'both', unit: '', target: '' };
+
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${isEdit ? '编辑打卡项' : '新建打卡项'}</div>
+
+      <div class="form-group">
+        <label class="form-label">名称</label>
+        <input class="form-input" id="habitName" value="${Utils.escape(h.name)}" placeholder="如：喝水、跑步、阅读">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">图标</label>
+        <div class="chip-group">
+          ${this.habitIcons.map((icon, i) => `
+            <div class="chip ${h.icon === icon ? 'active' : ''}" onclick="App.selectChip(this,'habitIcon',${i})" data-icon="${icon}" style="font-size:18px;width:42px;height:42px;display:flex;align-items:center;justify-content:center">${icon}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">颜色</label>
+        <div class="chip-group">
+          ${this.habitColors.map((c, i) => `
+            <div class="chip ${h.color === i ? 'active' : ''}" onclick="App.selectChip(this,'habitColor',${i})" data-idx="${i}" style="${h.color===i?'background:'+c+';color:#fff':''}">
+              <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${c}"></span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">记录类型</label>
+        <div class="segment" style="margin-bottom:0">
+          <div class="segment-item ${h.recordType==='number'?'active':''}" onclick="Habits.selectRecordType('number',this)">仅数值</div>
+          <div class="segment-item ${h.recordType==='text'?'active':''}" onclick="Habits.selectRecordType('text',this)">仅文字</div>
+          <div class="segment-item ${h.recordType==='both'?'active':''}" onclick="Habits.selectRecordType('both',this)">数值+文字</div>
+        </div>
+      </div>
+
+      <div class="form-group" id="habitUnitGroup" style="display:${h.recordType==='text'?'none':'block'}">
+        <label class="form-label">单位</label>
+        <input class="form-input" id="habitUnit" value="${Utils.escape(h.unit||'')}" placeholder="如：杯、公里、分钟、页">
+      </div>
+
+      <div class="form-group" id="habitTargetGroup" style="display:${h.recordType==='text'?'none':'block'}">
+        <label class="form-label">每日目标（可选）</label>
+        <input class="form-input" type="number" id="habitTarget" value="${h.target||''}" placeholder="如：8（杯）" step="0.1">
+      </div>
+
+      <div class="action-row">
+        ${isEdit ? `<button class="btn btn-danger" onclick="Habits.deleteHabit('${h.id}')">删除</button>` : ''}
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Habits.saveHabit(${isEdit?`'${h.id}'`:'null'})">保存</button>
+      </div>
+    `;
+    App.openSheet(html);
+    this._habitForm = { icon: h.icon, color: h.color, recordType: h.recordType };
+  },
+
+  _habitForm: { icon: '✅', color: 0, recordType: 'both' },
+
+  selectRecordType(type, el) {
+    this._habitForm.recordType = type;
+    el.parentElement.querySelectorAll('.segment-item').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('habitUnitGroup').style.display = type === 'text' ? 'none' : 'block';
+    document.getElementById('habitTargetGroup').style.display = type === 'text' ? 'none' : 'block';
+  },
+
+  async saveHabit(editId) {
+    const name = document.getElementById('habitName').value.trim();
+    if (!name) { App.toast('请输入名称'); return; }
+    const unit = document.getElementById('habitUnit')?.value.trim() || '';
+    const targetVal = document.getElementById('habitTarget')?.value;
+    const target = targetVal ? parseFloat(targetVal) : null;
+
+    const habitData = {
+      id: editId || Utils.uid(),
+      name,
+      icon: this._habitForm.icon,
+      color: this._habitForm.color,
+      recordType: this._habitForm.recordType,
+      unit,
+      target,
+      createdAt: new Date().toISOString()
+    };
+
+    await DB.put('habits', habitData);
+    App.closeSheet();
+    App.toast(editId ? '已更新' : '已创建');
+    this.render();
+    Home.render();
+  },
+
+  async deleteHabit(id) {
+    App.confirm('删除后打卡历史也会一并删除，确定？', async () => {
+      await DB.delete('habits', id);
+      const checkins = await DB.getByIndex('checkins', 'habitId', id);
+      for (const c of checkins) await DB.delete('checkins', c.id);
+      App.closeSheet();
+      App.toast('已删除');
+      this.render();
+      Home.render();
+    });
+  }
+};
+
+/* ============================================================
+ *  记事模块
+ * ============================================================ */
+const Notes = {
+  filterCategory: null,
+  defaultCategories: [
+    { name: '工作', color: 4 },
+    { name: '生活', color: 3 },
+    { name: '想法', color: 2 },
+    { name: '学习', color: 5 },
+  ],
+
+  async init() {
+    let cats = await DB.getAll('categories');
+    if (cats.length === 0) {
+      for (let i = 0; i < this.defaultCategories.length; i++) {
+        const d = this.defaultCategories[i];
+        await DB.add('categories', { id: Utils.uid(), name: d.name, color: d.color, order: i });
+      }
+    }
+  },
+
+  async render() {
+    const cats = await DB.getAll('categories');
+    cats.sort((a, b) => (a.order||0) - (b.order||0));
+
+    // 分类筛选
+    const filterEl = document.getElementById('noteCatFilter');
+    filterEl.innerHTML = `
+      <div class="chip ${this.filterCategory === null ? 'active' : ''}" style="flex-shrink:0" onclick="Notes.setFilter(null)">全部</div>
+      ${cats.map(c => `
+        <div class="chip ${this.filterCategory === c.id ? 'active' : ''}" style="flex-shrink:0" onclick="Notes.setFilter('${c.id}')">${Utils.escape(c.name)}</div>
+      `).join('')}
+      <div class="chip" style="flex-shrink:0;color:var(--text-light)" onclick="Notes.showCategoryManage()">管理</div>
+    `;
+
+    // 搜索
+    const search = document.getElementById('noteSearch').value.trim().toLowerCase();
+
+    // 获取笔记
+    let notes = await DB.getAll('notes');
+    if (this.filterCategory) notes = notes.filter(n => n.categoryId === this.filterCategory);
+    if (search) {
+      notes = notes.filter(n =>
+        (n.content || '').toLowerCase().includes(search) ||
+        (n.tags || []).some(t => t.toLowerCase().includes(search))
+      );
+    }
+    notes.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
+    const el = document.getElementById('notesList');
+    if (notes.length === 0) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">📝</div><div class="text">${search ? '没有找到相关笔记' : '还没有笔记，点击右上角 + 记一条'}</div></div>`;
+      return;
+    }
+
+    let html = '';
+    for (const note of notes) {
+      const cat = cats.find(c => c.id === note.categoryId);
+      const catName = cat ? cat.name : '未分类';
+      const catColor = cat ? cat.color : 7;
+      const rawContent = note.content || '';
+      const hasTitle = !!(note.title && note.title.trim());
+      const clamped = !this._expanded.has(note.id);
+      const showExpand = rawContent.length > 60;
+      html += `
+        <div class="note-card" onclick="Notes.toggleExpand('${note.id}', this.querySelector('.nc-content'), this.querySelector('.nc-expand'))">
+          <div class="nc-header">
+            <span class="nc-cat cat-color-${catColor}">${Utils.escape(catName)}</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span class="nc-time">${Utils.formatDateCN(note.updatedAt || note.createdAt)}</span>
+              <span class="nc-edit" title="编辑" onclick="event.stopPropagation();Notes.showEditNote('${note.id}')">✎</span>
+            </span>
+          </div>
+          ${hasTitle ? `<div class="nc-title">${Utils.escape(note.title.trim())}</div>` : ''}
+          <div class="nc-content ${clamped ? 'clamp' : ''}">${Utils.escape(rawContent)}</div>
+          ${showExpand ? `<span class="nc-expand">${clamped ? '展开全文' : '收起'}</span>` : ''}
+          ${note.tags && note.tags.length > 0 ? `
+            <div class="nc-tags">
+              ${note.tags.map(t => `<span class="nc-tag">#${Utils.escape(t)}</span>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+    el.innerHTML = html;
+  },
+
+  _expanded: new Set(),
+
+  toggleExpand(id, contentEl, linkEl) {
+    if (!contentEl) return;
+    if (this._expanded.has(id)) {
+      this._expanded.delete(id);
+      contentEl.classList.add('clamp');
+      if (linkEl) linkEl.textContent = '展开全文';
+    } else {
+      this._expanded.add(id);
+      contentEl.classList.remove('clamp');
+      if (linkEl) linkEl.textContent = '收起';
+    }
+  },
+
+  setFilter(catId) {
+    this.filterCategory = catId;
+    this.render();
+  },
+
+  showAddNote() {
+    this._renderNoteForm(null);
+  },
+
+  async showEditNote(id) {
+    const note = await DB.get('notes', id);
+    this._renderNoteForm(note);
+  },
+
+  async _renderNoteForm(editNote) {
+    const cats = await DB.getAll('categories');
+    cats.sort((a, b) => (a.order||0) - (b.order||0));
+    const isEdit = !!editNote;
+    const n = editNote || { content: '', title: '', categoryId: cats[0]?.id || '', tags: [] };
+
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${isEdit ? '编辑笔记' : '新笔记'}</div>
+
+      <div class="form-group">
+        <label class="form-label">分类</label>
+        <div class="chip-group">
+          ${cats.map(c => `
+            <div class="chip ${n.categoryId === c.id ? 'active' : ''}" onclick="App.selectChip(this,'noteCat','${c.id}')" data-id="${c.id}">${Utils.escape(c.name)}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">标题</label>
+        <input class="form-input" id="noteTitle" placeholder="标题（可选）" value="${Utils.escape(n.title || '')}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">内容</label>
+        <textarea class="form-textarea" id="noteContent" placeholder="写下你的想法..." style="min-height:120px">${Utils.escape(n.content)}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">标签</label>
+        <div class="tag-input-area" id="tagArea">
+          ${(n.tags||[]).map(t => `
+            <span class="tag-pill">#${Utils.escape(t)} <span class="remove" onclick="Notes.removeTag(this,'${Utils.escape(t)}')">×</span></span>
+          `).join('')}
+          <input type="text" id="tagInput" placeholder="输入标签后回车" onkeydown="Notes.onTagKeydown(event)">
+        </div>
+      </div>
+
+      <div class="action-row">
+        ${isEdit ? `<button class="btn btn-danger" onclick="Notes.deleteNote('${n.id}')">删除</button>` : ''}
+        <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
+        <button class="btn btn-primary" onclick="Notes.saveNote(${isEdit?`'${n.id}'`:'null'})">保存</button>
+      </div>
+    `;
+    App.openSheet(html);
+    this._noteForm = { categoryId: n.categoryId, tags: [...(n.tags||[])] };
+  },
+
+  _noteForm: { categoryId: '', tags: [] },
+
+  onTagKeydown(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const input = e.target;
+      const val = input.value.trim().replace(/^#/, '');
+      if (val && !this._noteForm.tags.includes(val)) {
+        this._noteForm.tags.push(val);
+        input.value = '';
+        this._refreshTags();
+      }
+    }
+  },
+
+  removeTag(el, tag) {
+    this._noteForm.tags = this._noteForm.tags.filter(t => t !== tag);
+    this._refreshTags();
+  },
+
+  _refreshTags() {
+    const area = document.getElementById('tagArea');
+    const input = document.getElementById('tagInput');
+    const inputVal = input ? input.value : '';
+    area.innerHTML = this._noteForm.tags.map(t => `
+      <span class="tag-pill">#${Utils.escape(t)} <span class="remove" onclick="Notes.removeTag(this,'${Utils.escape(t)}')">×</span></span>
+    `).join('') + `<input type="text" id="tagInput" placeholder="输入标签后回车" onkeydown="Notes.onTagKeydown(event)" value="${Utils.escape(inputVal)}">`;
+    document.getElementById('tagInput').focus();
+  },
+
+  async saveNote(editId) {
+    const content = document.getElementById('noteContent').value.trim();
+    if (!content) { App.toast('请输入内容'); return; }
+    const title = (document.getElementById('noteTitle').value || '').trim();
+
+    const now = new Date().toISOString();
+    const noteData = {
+      id: editId || Utils.uid(),
+      title,
+      content,
+      categoryId: this._noteForm.categoryId,
+      tags: [...this._noteForm.tags],
+      createdAt: editId ? (await DB.get('notes', editId)).createdAt : now,
+      updatedAt: now
+    };
+
+    await DB.put('notes', noteData);
+    App.closeSheet();
+    App.toast(editId ? '已更新' : '已保存');
+    this.render();
+    Home.render();
+  },
+
+  async deleteNote(id) {
+    App.confirm('确定删除这条笔记？', async () => {
+      await DB.delete('notes', id);
+      App.closeSheet();
+      App.toast('已删除');
+      this.render();
+      Home.render();
+    });
+  },
+
+  async showCategoryManage() {
+    const cats = await DB.getAll('categories');
+    cats.sort((a, b) => (a.order||0) - (b.order||0));
+
+    let html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">分类管理</div>
+      <div class="card">
+        ${cats.map(c => `
+          <div class="list-item">
+            <div class="list-item-icon cat-color-${c.color}" style="border-radius:50%">●</div>
+            <div class="list-item-content"><div class="list-item-title">${Utils.escape(c.name)}</div></div>
+            <div class="list-item-right">
+              <button class="btn btn-sm btn-danger" onclick="Notes.deleteCategory('${c.id}')">删除</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="card">
+        <div class="card-title">添加分类</div>
+        <div class="form-group">
+          <input class="form-input" id="newCatName" placeholder="分类名称">
+        </div>
+        <div class="form-group">
+          <label class="form-label">颜色</label>
+          <div class="chip-group" id="newCatColorGroup">
+            ${[0,1,2,3,4,5,6,7].map(i => `
+              <div class="chip ${i===0?'active':''}" onclick="App.selectChip(this,'catColor',${i})" data-idx="${i}" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px">
+                <span class="cat-color-${i}" style="display:inline-block;width:18px;height:18px;border-radius:50%"></span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="Notes.addCategory()">添加</button>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet();Notes.render()">完成</button>
+      </div>
+    `;
+    this._newCatColor = 0;
+    App.openSheet(html);
+  },
+
+  _newCatColor: 0,
+
+  async addCategory() {
+    const name = document.getElementById('newCatName').value.trim();
+    if (!name) { App.toast('请输入名称'); return; }
+    const cats = await DB.getAll('categories');
+    await DB.add('categories', { id: Utils.uid(), name, color: this._newCatColor, order: cats.length });
+    document.getElementById('newCatName').value = '';
+    App.toast('已添加');
+    this.showCategoryManage();
+  },
+
+  async deleteCategory(id) {
+    const notes = await DB.getByIndex('notes', 'categoryId', id);
+    if (notes.length > 0) {
+      App.toast('该分类下有笔记，无法删除');
+      return;
+    }
+    App.confirm('确定删除该分类？', async () => {
+      await DB.delete('categories', id);
+      App.toast('已删除');
+      this.showCategoryManage();
+    });
+  }
+};
+
+/* ============================================================
+ *  工作台首页
+ * ============================================================ */
+const Home = {
+  async render() {
+    // 日期
+    const now = new Date();
+    document.getElementById('homeDate').textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${Utils.weekDay()}`;
+    document.querySelector('.home-greeting').textContent = `${Utils.greeting()} 👋`;
+
+    // 统计卡片
+    const ledger = await Finance.getCurrentLedger();
+    const txs = ledger ? await DB.getByIndex('transactions', 'ledgerId', ledger.id) : [];
+    const now2 = new Date();
+    const monthStart = new Date(now2.getFullYear(), now2.getMonth(), 1).toISOString();
+    const monthTx = txs.filter(t => t.date >= monthStart);
+    const monthTotal = monthTx.reduce((s, t) => s + Utils.txAmt(t), 0);
+
+    const habits = await DB.getAll('habits');
+    const today = Utils.todayStr();
+    let habitDone = 0;
+    for (const h of habits) {
+      const checkins = await DB.getByIndex('checkins', 'habitId', h.id);
+      if (checkins.some(c => c.timestamp.slice(0, 10) === today)) habitDone++;
+    }
+
+    const notes = await DB.getAll('notes');
+
+    document.getElementById('homeStats').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">本月支出</div>
+        <div class="stat-value">${Utils.formatMoney(monthTotal)}</div>
+        <div class="stat-sub">${ledger ? Utils.escape(ledger.name) : '无账本'} · ${monthTx.length}笔</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">今日打卡</div>
+        <div class="stat-value">${habitDone}<span style="font-size:16px;color:var(--text-light)">/${habits.length}</span></div>
+        <div class="stat-sub">${habits.length > 0 ? Math.round(habitDone/habits.length*100) + '% 完成' : '暂无项目'}</div>
+      </div>
+    `;
+
+    // 日历数据聚合（跨月缓存，供切换月份复用）
+    const allCheckins = [];
+    for (const h of habits) {
+      const cs = await DB.getByIndex('checkins', 'habitId', h.id);
+      for (const c of cs) allCheckins.push({ day: c.timestamp.slice(0, 10), icon: h.icon });
+    }
+    const checkinByDay = {};
+    for (const c of allCheckins) {
+      (checkinByDay[c.day] = checkinByDay[c.day] || []).push(c.icon);
+    }
+    const spendByDay = {};
+    for (const t of txs) {
+      const amt = Utils.txAmt(t);
+      if (amt > 0) {
+        const day = t.date.slice(0, 10);
+        spendByDay[day] = (spendByDay[day] || 0) + amt;
+      }
+    }
+    this._calCheckinMap = checkinByDay;
+    this._calSpendMap = spendByDay;
+    this._renderCalendar();
+
+    // 最近记账
+    const financeEl = document.getElementById('homeFinance');
+    if (txs.length === 0) {
+      financeEl.innerHTML = `<div style="text-align:center;color:var(--text-light);padding:12px">暂无记录</div>`;
+    } else {
+      const recent = txs.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3);
+      financeEl.innerHTML = recent.map(tx => {
+        const cat = Finance.txCategories[tx.categoryIdx] || Finance.txCategories[7];
+        const payer = ledger.members[tx.payerIdx] || '?';
+        const amtHtml = tx.amountUnknown ? `<span style="color:var(--warning)">未知</span>` : Utils.formatMoney(tx.amount);
+        return `
+          <div class="list-item">
+            <div class="list-item-icon icon-bg-${cat.color}">${cat.icon}</div>
+            <div class="list-item-content">
+              <div class="list-item-title">${Utils.escape(tx.note || cat.name)}</div>
+              <div class="list-item-sub">${Utils.escape(payer)} · ${Utils.formatDate(tx.date)}</div>
+            </div>
+            <div class="list-item-right">
+              <div class="list-item-amount">${amtHtml}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 最近记事
+    const notesEl = document.getElementById('homeNotes');
+    if (notes.length === 0) {
+      notesEl.innerHTML = `<div style="text-align:center;color:var(--text-light);padding:12px">暂无笔记</div>`;
+    } else {
+      const cats = await DB.getAll('categories');
+      const recent = notes.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)).slice(0, 3);
+      notesEl.innerHTML = recent.map(note => {
+        const cat = cats.find(c => c.id === note.categoryId);
+        const catName = cat ? cat.name : '未分类';
+        const hasTitle = !!(note.title && note.title.trim());
+        const dispTitle = hasTitle ? note.title.trim() : note.content.slice(0, 40);
+        const ellipsis = (!hasTitle && note.content.length > 40) ? '...' : '';
+        return `
+          <div class="list-item" onclick="App.navigate('notes');setTimeout(()=>Notes.showEditNote('${note.id}'),300)">
+            <div class="list-item-icon" style="background:var(--bg);font-size:18px">📝</div>
+            <div class="list-item-content">
+              <div class="list-item-title" style="font-size:14px">${Utils.escape(dispTitle)}${ellipsis}</div>
+              <div class="list-item-sub">${Utils.escape(catName)} · ${Utils.formatDateCN(note.updatedAt || note.createdAt)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  },
+
+  prevMonth() {
+    if (this._calMonth === undefined) return;
+    this._calMonth--;
+    if (this._calMonth < 0) { this._calMonth = 11; this._calYear--; }
+    this._renderCalendar();
+  },
+
+  nextMonth() {
+    if (this._calMonth === undefined) return;
+    this._calMonth++;
+    if (this._calMonth > 11) { this._calMonth = 0; this._calYear++; }
+    this._renderCalendar();
+  },
+
+  _renderCalendar() {
+    if (this._calYear === undefined) {
+      const n = new Date();
+      this._calYear = n.getFullYear();
+      this._calMonth = n.getMonth();
+    }
+    const year = this._calYear, month = this._calMonth;
+    const label = document.getElementById('calMonthLabel');
+    if (label) label.textContent = year + '年' + (month + 1) + '月';
+
+    const startWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayStr = Utils.todayStr();
+    const checkinByDay = this._calCheckinMap || {};
+    const spendByDay = this._calSpendMap || {};
+
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    let html = '<div class="cal-grid">';
+    html += weekdays.map(w => '<div class="cal-wd">' + w + '</div>').join('');
+    for (let i = 0; i < startWeekday; i++) html += '<div class="cal-cell empty"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      const icons = checkinByDay[ds] || [];
+      const spend = spendByDay[ds] || 0;
+      const isToday = ds === todayStr;
+      let marks = '';
+      if (icons.length) {
+        marks += '<div class="cal-icons">' + icons.slice(0, 5).map(ic => '<span class="cal-ic">' + ic + '</span>').join('') + (icons.length > 5 ? '<span class="cal-more">+' + (icons.length - 5) + '</span>' : '') + '</div>';
+      }
+      if (spend > 0) marks += '<div class="cal-spend">¥' + (Math.round(spend * 100) / 100).toFixed(0) + '</div>';
+      html += '<div class="cal-cell' + (isToday ? ' today' : '') + '"><div class="cal-num">' + d + '</div>' + marks + '</div>';
+    }
+    html += '</div>';
+    const container = document.getElementById('homeCalendar');
+    if (container) container.innerHTML = html;
+  },
+
+  async openSettings() {
+    App.openSettings();
+  }
+};
+
+/* ============================================================
+ *  主应用
+ * ============================================================ */
+const App = {
+  currentPage: 'home',
+
+  async init() {
+    if (Auth.token) {
+      try {
+        await Auth.verify();
+        DB.setCloud(Auth.token);
+        await this.ensureSeed();
+        await this.boot();
+        return;
+      } catch (e) {
+        Auth.clear();
+      }
+    }
+    this.showLogin();
+  },
+
+  async boot() {
+    await DB.init();
+    await Finance.init();
+    await Habits.init();
+    await Notes.init();
+    await Home.render();
+    await Finance.render();
+    await Habits.render();
+    await Notes.render();
+    const screen = document.getElementById('authScreen');
+    const app = document.getElementById('app');
+    if (screen) screen.style.display = 'none';
+    if (app) app.style.display = '';
+  },
+
+  ensureSeed() {
+    return fetch(apiUrl('/api/seed-defaults'), {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + Auth.token }
+    }).catch(() => {});
+  },
+
+  showLogin() {
+    const screen = document.getElementById('authScreen');
+    const app = document.getElementById('app');
+    if (screen) screen.style.display = 'flex';
+    if (app) app.style.display = 'none';
+    this._authMode = 'login';
+    this.switchAuthTab('login');
+  },
+
+  switchAuthTab(mode) {
+    this._authMode = mode;
+    const tL = document.getElementById('authTabLogin');
+    const tR = document.getElementById('authTabRegister');
+    const hint = document.getElementById('authHint');
+    const btn = document.querySelector('#authScreen .auth-btn');
+    if (tL) tL.classList.toggle('active', mode === 'login');
+    if (tR) tR.classList.toggle('active', mode === 'register');
+    if (hint) hint.textContent = mode === 'register'
+      ? '注册后自动登录，数据仅属于该手机号'
+      : '没有账号？切到「注册」先用手机号注册一个';
+    if (btn) btn.textContent = mode === 'register' ? '注册并登录' : '登录';
+  },
+
+  async doAuth() {
+    const phoneEl = document.getElementById('authPhone');
+    const pwdEl = document.getElementById('authPwd');
+    const btn = document.querySelector('#authScreen .auth-btn');
+    const phone = phoneEl ? phoneEl.value.trim() : '';
+    const pwd = pwdEl ? pwdEl.value : '';
+    if (!/^\d{6,20}$/.test(phone)) { this.toast('请输入有效手机号'); return; }
+    if (!pwd || pwd.length < 4) { this.toast('密码至少 4 位'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
+    try {
+      const r = this._authMode === 'register'
+        ? await Auth.register(phone, pwd)
+        : await Auth.login(phone, pwd);
+      Auth.set(r.token, r.user.phone);
+      DB.setCloud(r.token);
+      await this.ensureSeed();
+      await this.boot();
+      this.toast(this._authMode === 'register' ? '注册成功，已登录' : '登录成功');
+      this.maybeAutoMigrate();
+    } catch (e) {
+      this.toast(e.message || '操作失败，请确认服务端地址已填写且服务已启动');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = this._authMode === 'register' ? '注册并登录' : '登录'; }
+    }
+  },
+
+  async useLocalMode() {
+    Auth.clear();
+    DB.setLocal();
+    await this.boot();
+  },
+
+  async logout() {
+    Auth.clear();
+    DB.setLocal();
+    this.showLogin();
+  },
+
+  navigate(page) {
+    this.currentPage = page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-item')[['home','finance','habits','notes'].indexOf(page)]?.classList.add('active');
+    document.getElementById('pageContainer').scrollTop = 0;
+
+    // 刷新对应页面
+    if (page === 'home') Home.render();
+    if (page === 'finance') Finance.render();
+    if (page === 'habits') Habits.render();
+    if (page === 'notes') Notes.render();
+  },
+
+  // ===== Sheet 管理 =====
+  openSheet(html) {
+    document.getElementById('sheet').innerHTML = html;
+    document.getElementById('sheet').classList.add('show');
+    document.getElementById('sheetOverlay').classList.add('show');
+  },
+
+  closeSheet() {
+    document.getElementById('sheet').classList.remove('show');
+    document.getElementById('sheetOverlay').classList.remove('show');
+  },
+
+  // ===== Toast =====
+  toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  },
+
+  // ===== 确认弹窗 =====
+  _confirmCb: null,
+  confirm(text, cb) {
+    document.getElementById('confirmText').textContent = text;
+    this._confirmCb = cb;
+    document.getElementById('confirmDialog').classList.add('show');
+  },
+  confirmYes() {
+    document.getElementById('confirmDialog').classList.remove('show');
+    if (this._confirmCb) this._confirmCb();
+  },
+  confirmNo() {
+    document.getElementById('confirmDialog').classList.remove('show');
+    this._confirmCb = null;
+  },
+
+  // ===== 通用选择芯片 =====
+  selectChip(el, prefix, value) {
+    el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+
+    if (prefix === 'txCategory') Finance._formState.categoryIdx = value;
+    else if (prefix === 'txPayer') Finance._formState.payerIdx = value;
+    else if (prefix === 'habitIcon') Habits._habitForm.icon = el.dataset.icon;
+    else if (prefix === 'habitColor') Habits._habitForm.color = value;
+    else if (prefix === 'noteCat') Notes._noteForm.categoryId = value;
+    else if (prefix === 'catColor') Notes._newCatColor = value;
+    else if (prefix === 'ledgerColor') Finance._newLedgerColor = value;
+  },
+
+  toggleParticipant(el, idx) {
+    const isActive = el.classList.contains('active');
+    if (isActive) {
+      el.classList.remove('active');
+      el.querySelector('.check').textContent = '';
+      Finance._formState.participantIdxs = Finance._formState.participantIdxs.filter(i => i !== idx);
+      delete Finance._formState.splitRatios[idx];
+    } else {
+      el.classList.add('active');
+      el.querySelector('.check').textContent = '✓';
+      Finance._formState.participantIdxs.push(idx);
+    }
+    // 同步「自定义比例」列表：只显示已勾选的参与人
+    const area = document.getElementById('splitRatioArea');
+    if (area && area.style.display !== 'none') Finance.renderSplitRatioList();
+  },
+
+  // 按当前已勾选的参与人重建自定义比例输入
+  renderSplitRatioList() {
+    const fs = this._formState;
+    const ledger = this._formLedger;
+    const list = document.getElementById('splitRatioList');
+    if (!list || !ledger) return;
+    const parts = fs.participantIdxs || [];
+    if (parts.length === 0) {
+      list.innerHTML = '<div style="font-size:13px;color:var(--text-light)">请先在上方选择参与人</div>';
+      return;
+    }
+    list.innerHTML = parts.map(i => `
+      <div class="split-ratio-row">
+        <span class="sr-name">${Utils.escape(ledger.members[i] || '?')}</span>
+        <input type="number" value="${fs.splitRatios?.[i] ?? ''}" placeholder="0" step="0.1" data-member-idx="${i}" oninput="Finance.updateSplitRatio()">
+        <span class="sr-unit">份</span>
+      </div>
+    `).join('');
+  },
+
+  // 实时把比例输入同步到表单状态（供重建列表时保留已填值）
+  updateSplitRatio() {
+    const fs = this._formState;
+    if (!fs.splitRatios) fs.splitRatios = {};
+    document.querySelectorAll('#splitRatioList input').forEach(inp => {
+      const idx = parseInt(inp.dataset.memberIdx);
+      const val = parseFloat(inp.value);
+      if (val && val > 0 && (fs.participantIdxs || []).includes(idx)) fs.splitRatios[idx] = val;
+      else delete fs.splitRatios[idx];
+    });
+  },
+
+  // ===== 设置 =====
+  async openSettings() {
+    const habits = await DB.getAll('habits');
+    const txs = await DB.getAll('transactions');
+    const notes = await DB.getAll('notes');
+    const checkins = await DB.getAll('checkins');
+
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">⚙️ 设置</div>
+
+      <div class="card">
+        <div class="card-title">📊 数据统计</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px">
+          <div>打卡项目：${habits.length}</div>
+          <div>打卡记录：${checkins.length}</div>
+          <div>记账记录：${txs.length}</div>
+          <div>笔记数量：${notes.length}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="setting-item" style="display:block">
+          <div class="si-label" style="margin-bottom:8px">☁️ 云端服务器地址</div>
+          <input id="apiBaseInput" value="${DB.apiBase || 'http://localhost:3001'}" placeholder="http://localhost:3001 或 Render 网址" onchange="App.setApiBase(this.value)"
+            style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fafafa">
+          <div style="font-size:11px;color:var(--text-light);margin-top:5px">本机运行服务填 http://localhost:3001；部署到 Render 后填对应网址</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="setting-item" onclick="App.exportData()">
+          <div class="si-icon">📤</div>
+          <div class="si-label">导出全部数据（备份）</div>
+          <div class="si-arrow">›</div>
+        </div>
+        <div class="setting-item" onclick="App.importData()">
+          <div class="si-icon">📥</div>
+          <div class="si-label">从文件导入数据</div>
+          <div class="si-arrow">›</div>
+        </div>
+        <div class="setting-item" onclick="App.migrateToCloud()">
+          <div class="si-icon">⬆️</div>
+          <div class="si-label">${DB.mode === 'cloud' ? '迁移本机数据到云端账号' : '登录后可迁移本机数据到云端'}</div>
+          <div class="si-arrow">›</div>
+        </div>
+        <div class="setting-item" onclick="App.clearData()">
+          <div class="si-icon" style="color:var(--danger)">🗑️</div>
+          <div class="si-label" style="color:var(--danger)">清空全部数据</div>
+          <div class="si-arrow">›</div>
+        </div>
+      </div>
+
+      ${DB.mode === 'cloud' ? `
+      <div class="card">
+        <div class="setting-item" onclick="App.logout()">
+          <div class="si-icon" style="color:var(--danger)">🚪</div>
+          <div class="si-label" style="color:var(--danger)">退出登录（云端数据保留）</div>
+          <div class="si-arrow">›</div>
+        </div>
+      </div>` : ''}
+
+      <div class="card" style="text-align:center;font-size:13px;color:var(--text-light)">
+        <div>我的工作台 v1.1（云端版）</div>
+        <div style="margin-top:4px">${DB.mode === 'cloud' ? ('已同步到云端 · ' + (Auth.phone || '')) : '本地模式 · 数据仅存本设备'}</div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">关闭</button>
+      </div>
+    `;
+    this.openSheet(html);
+  },
+
+  async exportData() {
+    const data = {
+      version: 1,
+      exportDate: new Date().toISOString(),
+      ledgers: await DB.getAll('ledgers'),
+      transactions: await DB.getAll('transactions'),
+      habits: await DB.getAll('habits'),
+      checkins: await DB.getAll('checkins'),
+      categories: await DB.getAll('categories'),
+      notes: await DB.getAll('notes'),
+      meta: await DB.getAll('meta'),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `工作台备份_${Utils.todayStr()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    App.toast('已导出');
+  },
+
+  importData() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!data.version) { App.toast('文件格式不对'); return; }
+
+        App.confirm('导入将覆盖现有数据，确定？', async () => {
+          await DB.clearAll();
+          for (const store of ['ledgers','transactions','habits','checkins','categories','notes','meta']) {
+            if (data[store]) {
+              for (const item of data[store]) {
+                await DB.put(store, item);
+              }
+            }
+          }
+          App.toast('导入成功');
+          App.closeSheet();
+          await Finance.init();
+          await Home.render();
+          await Finance.render();
+          await Habits.render();
+          await Notes.render();
+        });
+      } catch (err) {
+        App.toast('导入失败：' + err.message);
+      }
+    };
+    input.click();
+  },
+
+  // ===== 云端服务器地址 =====
+  setApiBase(v) {
+    DB.setApiBase(v);
+    if (DB.apiBase) {
+      Auth.clear(); DB.setLocal();
+    }
+    App.toast(DB.apiBase ? '已保存服务器地址（请重新登录）' : '已改为同源模式');
+  },
+
+  // ===== 读取本机 IndexedDB（与当前模式无关）=====
+  async readLocalAll() {
+    const stores = ['ledgers', 'transactions', 'habits', 'checkins', 'categories', 'notes', 'settlements', 'meta'];
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open(DB.DB_NAME, DB.DB_VERSION);
+      r.onsuccess = e => res(e.target.result);
+      r.onerror = e => rej(e.target.error);
+    });
+    const result = {};
+    for (const s of stores) {
+      result[s] = await new Promise((res) => {
+        try {
+          const tx = db.transaction(s, 'readonly');
+          const req = tx.objectStore(s).getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        } catch (e) { res([]); }
+      });
+    }
+    db.close();
+    return result;
+  },
+
+  // ===== 登录后若发现本机有历史数据，自动提示一次性迁移 =====
+  async maybeAutoMigrate() {
+    try {
+      const local = await App.readLocalAll();
+      const total = ['habits', 'checkins', 'transactions', 'notes', 'ledgers']
+        .reduce((a, s) => a + (local[s] || []).length, 0);
+      if (!total) return;
+      const flag = 'wb_migrated_' + (Auth.phone || '');
+      try { if (localStorage.getItem(flag)) return; } catch (e) {}
+      const n = (s) => (local[s] || []).length;
+      const summary = `打卡项 ${n('habits')} · 打卡记录 ${n('checkins')} · 记账 ${n('transactions')} · 笔记 ${n('notes')} · 账本 ${n('ledgers')}`;
+      App.confirm(`发现本机有历史数据，是否迁移到云端账号 ${Auth.phone}？\n（${summary}）`, async () => {
+        await App.migrateToCloud(true);
+        try { localStorage.setItem(flag, '1'); } catch (e) {}
+      });
+    } catch (e) {}
+  },
+
+  // ===== 把本机数据迁移/覆盖到已登录的云端账号 =====
+  async migrateToCloud(skipConfirm) {
+    if (!Auth.token) {
+      App.toast('请先在登录界面登录云端账号');
+      App.showLogin();
+      return;
+    }
+    const local = await App.readLocalAll();
+    const n = (s) => (local[s] || []).length;
+    const summary = `打卡项 ${n('habits')} · 打卡记录 ${n('checkins')} · 记账 ${n('transactions')} · 笔记 ${n('notes')} · 账本 ${n('ledgers')}`;
+    const doMigrate = async () => {
+      App.toast('正在迁移…');
+      try {
+        const metaObj = {};
+        (local.meta || []).forEach(m => { if (m && m.key != null) metaObj[m.key] = m.value; });
+        const payload = {
+          ledgers: local.ledgers || [],
+          transactions: local.transactions || [],
+          habits: local.habits || [],
+          checkins: local.checkins || [],
+          categories: local.categories || [],
+          notes: local.notes || [],
+          settlements: local.settlements || [],
+          meta: metaObj
+        };
+        const base = (DB.apiBase || '').replace(/\/$/, '');
+        const resp = await fetch(base + '/api/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Auth.token },
+          body: JSON.stringify({ data: payload })
+        });
+        if (!resp.ok) {
+          const e = await resp.json().catch(() => ({}));
+          throw new Error(e.error || '迁移失败');
+        }
+        App.toast('迁移成功，正在刷新…');
+        setTimeout(() => location.reload(), 900);
+      } catch (e) {
+        App.toast('迁移失败：' + e.message);
+      }
+    };
+    if (skipConfirm) { await doMigrate(); return; }
+    App.confirm(`将把本机全部数据覆盖到云端账号 ${Auth.phone}，确定？\n（${summary}）`, doMigrate);
+  },
+
+  clearData() {
+    App.confirm('⚠️ 此操作将清空所有数据且不可恢复，确定？', async () => {
+      await DB.clearAll();
+      App.toast('已清空');
+      App.closeSheet();
+      location.reload();
+    });
+  }
+};
+
+// ===== 启动 =====
+App.init();
+</script>
+<!-- ===== 登录界面 ===== -->
+<div id="authScreen">
+  <div class="auth-title">我的工作台</div>
+  <div class="auth-sub">登录账号后，手机 / 电脑可同步同一份数据</div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="authTabLogin" onclick="App.switchAuthTab('login')">登录</div>
+      <div class="auth-tab" id="authTabRegister" onclick="App.switchAuthTab('register')">注册</div>
+    </div>
+    <input class="auth-input" id="authPhone" type="tel" inputmode="numeric" placeholder="手机号">
+    <input class="auth-input" id="authPwd" type="password" placeholder="密码（至少 4 位）">
+    <button class="auth-btn" onclick="App.doAuth()">登录</button>
+    <div class="auth-hint" id="authHint">没有账号？切到「注册」先用手机号注册一个即可</div>
+  </div>
+  <div class="auth-local" onclick="App.useLocalMode()">仅本机使用（不同步云端）</div>
+</div>
+
+</body>
+</html>

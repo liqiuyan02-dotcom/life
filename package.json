@@ -1,0 +1,16 @@
+{
+  "name": "workbench-server",
+  "version": "1.0.0",
+  "description": "个人工作台云端后端：手机号+密码登录 + 多设备同步",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "debug": "^4.3.7",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
