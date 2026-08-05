@@ -1234,7 +1234,7 @@ const Finance = {
         ? `<span style="color:var(--warning)">未知</span>`
         : Utils.formatMoney(tx.amount);
       const settleTag = tx.settlementId
-        ? `<span style="font-size:11px;color:var(--success);border:1px solid var(--success);border-radius:4px;padding:0 4px;margin-left:4px">已清算</span>`
+        ? `<span style="font-size:11px;color:var(--text-light);border:1px solid var(--text-light);border-radius:4px;padding:0 4px;margin-left:4px">已清算</span>`
         : '';
       html += `
         <div class="card" style="padding:14px 16px;margin-bottom:8px" onclick="Finance.showEditTransaction('${tx.id}')">
@@ -1319,7 +1319,7 @@ const Finance = {
       const payer = st.ledger.members[t.payerIdx] || '?';
       const checked = !t.settlementId ? 'checked' : '';
       const settleTag = t.settlementId
-        ? `<span style="font-size:11px;color:var(--success);border:1px solid var(--success);border-radius:4px;padding:0 4px;margin-left:4px">已清算</span>`
+        ? `<span style="font-size:11px;color:var(--text-light);border:1px solid var(--text-light);border-radius:4px;padding:0 4px;margin-left:4px;cursor:pointer" onclick="event.preventDefault();Finance.toggleStatsTx('${t.id}')">已清算</span>`
         : '';
       html += `
         <label class="settle-row" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
@@ -1407,6 +1407,11 @@ const Finance = {
   statsSelectAll(checked) {
     document.querySelectorAll('.stats-tx-check').forEach(c => c.checked = checked);
     this.updateStatsSummary();
+  },
+
+  toggleStatsTx(id) {
+    const cb = document.querySelector(`.stats-tx-check[data-tx-id="${id}"]`);
+    if (cb) { cb.checked = !cb.checked; this.updateStatsSummary(); }
   },
 
   async statsSettle() {
