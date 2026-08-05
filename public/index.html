@@ -1260,10 +1260,14 @@ const Finance = {
     const allTxs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
     allTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+    const settlements = await DB.getByIndex('settlements', 'ledgerId', ledger.id);
+    const settleById = {};
+    settlements.forEach(s => settleById[s.id] = s);
+
     const dates = allTxs.map(t => t.date.slice(0, 10));
     const minDate = dates.length ? dates.reduce((a, b) => a < b ? a : b) : Utils.todayStr();
     const maxDate = dates.length ? dates.reduce((a, b) => a > b ? a : b) : Utils.todayStr();
-    this._statsState = { ledger, allTxs, minDate, maxDate };
+    this._statsState = { ledger, allTxs, minDate, maxDate, settleById };
 
     let html = `
       <div class="card">
@@ -1273,7 +1277,7 @@ const Finance = {
           <span style="color:var(--text-light);font-size:13px">至</span>
           <input type="date" class="form-input" id="statsEnd" value="${maxDate}" onchange="Finance.updateStats()" style="flex:1">
         </div>
-        <div style="font-size:12px;color:var(--text-light)">勾选要参与统计的账目；已清算的默认不勾选，可手动重新勾选</div>
+        <div style="font-size:12px;color:var(--text-light)">勾选要参与统计的账目；已清算的会单独列出，选错可点「取消清算」后重新统计</div>
       </div>
       <div id="statsSummary"></div>
       <div class="card">
@@ -1306,6 +1310,8 @@ const Finance = {
       const d = t.date.slice(0, 10);
       return d >= start && d <= end;
     });
+    const openTxs = filtered.filter(t => !t.settlementId);
+    const settledTxs = filtered.filter(t => t.settlementId);
 
     if (filtered.length === 0) {
       listEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><div class="text">该时间段暂无账目</div></div>`;
@@ -1314,23 +1320,54 @@ const Finance = {
     }
 
     let html = '';
-    for (const t of filtered) {
-      const cat = this.txCategories[t.categoryIdx] || this.txCategories[7];
-      const payer = st.ledger.members[t.payerIdx] || '?';
-      const checked = !t.settlementId ? 'checked' : '';
-      const settleTag = t.settlementId
-        ? `<span style="font-size:11px;color:var(--text-light);border:1px solid var(--text-light);border-radius:4px;padding:0 4px;margin-left:4px;cursor:pointer" onclick="event.preventDefault();Finance.toggleStatsTx('${t.id}')">已清算</span>`
-        : '';
-      html += `
-        <label class="settle-row" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
-          <input type="checkbox" class="stats-tx-check" data-tx-id="${t.id}" ${checked} onchange="Finance.updateStatsSummary()">
-          <div class="list-item-icon icon-bg-${cat.color}" style="margin:0">${cat.icon}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escape(t.note || cat.name)}${settleTag}</div>
-            <div style="font-size:12px;color:var(--text-secondary)">${Utils.formatDate(t.date)} · ${Utils.escape(payer)}付 · ${t.participantIdxs.length}人分摊</div>
-          </div>
-          <div style="font-weight:700;color:var(--text)">${t.amountUnknown ? '待定' : Utils.formatMoney(t.amount)}</div>
-        </label>`;
+    if (openTxs.length > 0) {
+      html += `<div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin:4px 0 2px">📝 待统计 (${openTxs.length})</div>`;
+      for (const t of openTxs) {
+        const cat = this.txCategories[t.categoryIdx] || this.txCategories[7];
+        const payer = st.ledger.members[t.payerIdx] || '?';
+        html += `
+          <label class="settle-row" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+            <input type="checkbox" class="stats-tx-check" data-tx-id="${t.id}" checked onchange="Finance.updateStatsSummary()">
+            <div class="list-item-icon icon-bg-${cat.color}" style="margin:0">${cat.icon}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escape(t.note || cat.name)}</div>
+              <div style="font-size:12px;color:var(--text-secondary)">${Utils.formatDate(t.date)} · ${Utils.escape(payer)}付 · ${t.participantIdxs.length}人分摊</div>
+            </div>
+            <div style="font-weight:700;color:var(--text)">${t.amountUnknown ? '待定' : Utils.formatMoney(t.amount)}</div>
+          </label>`;
+      }
+    }
+
+    if (settledTxs.length > 0) {
+      const groups = {};
+      settledTxs.forEach(t => { (groups[t.settlementId] = groups[t.settlementId] || []).push(t); });
+      const sids = Object.keys(groups).sort((a, b) => new Date(st.settleById[b]?.date || 0) - new Date(st.settleById[a]?.date || 0));
+      html += `<div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin:14px 0 2px">✅ 已清算 (${settledTxs.length}) —— 选错可取消</div>`;
+      for (const sid of sids) {
+        const g = groups[sid];
+        const gTotal = g.reduce((a, t) => a + Utils.txAmt(t), 0);
+        html += `
+          <div style="margin-bottom:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 2px">
+              <div style="font-size:12px;color:var(--text-light)">清算于 ${Utils.formatDateTime(st.settleById[sid]?.date || new Date().toISOString())} · ${g.length} 笔 · ${Utils.formatMoney(gTotal)}</div>
+              <button class="btn btn-sm btn-secondary" onclick="Finance.statsRevertSettlement('${sid}')">取消清算</button>
+            </div>
+            <div class="card" style="padding:0 12px">`;
+        for (const t of g) {
+          const cat = this.txCategories[t.categoryIdx] || this.txCategories[7];
+          const payer = st.ledger.members[t.payerIdx] || '?';
+          html += `
+            <div class="settle-row" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+              <div class="list-item-icon icon-bg-${cat.color}" style="margin:0">${cat.icon}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escape(t.note || cat.name)}</div>
+                <div style="font-size:12px;color:var(--text-secondary)">${Utils.formatDate(t.date)} · ${Utils.escape(payer)}付 · ${t.participantIdxs.length}人分摊</div>
+              </div>
+              <div style="font-weight:700;color:var(--text)">${t.amountUnknown ? '待定' : Utils.formatMoney(t.amount)}</div>
+            </div>`;
+        }
+        html += `</div></div>`;
+      }
     }
     listEl.innerHTML = html;
     this.updateStatsSummary();
@@ -1409,11 +1446,6 @@ const Finance = {
     this.updateStatsSummary();
   },
 
-  toggleStatsTx(id) {
-    const cb = document.querySelector(`.stats-tx-check[data-tx-id="${id}"]`);
-    if (cb) { cb.checked = !cb.checked; this.updateStatsSummary(); }
-  },
-
   async statsSettle() {
     const st = this._statsState;
     if (!st) return;
@@ -1434,6 +1466,28 @@ const Finance = {
     App.toast(`已清算 ${ids.length} 笔账目`);
     this.renderStats();
     Home.render();
+  },
+
+  async _revertSettlementById(ledger, sid) {
+    const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    for (const t of txs) {
+      if (t.settlementId === sid) {
+        delete t.settlementId;
+        await DB.put('transactions', t);
+      }
+    }
+    await DB.delete('settlements', sid);
+  },
+
+  async statsRevertSettlement(sid) {
+    const st = this._statsState;
+    if (!st) return;
+    App.confirm('取消清算后，这批账目会恢复为「未清算」并重新计入统计，确定？', async () => {
+      await this._revertSettlementById(st.ledger, sid);
+      App.toast('已取消清算');
+      this.renderStats();
+      Home.render();
+    });
   },
 
   async renderMembers() {
@@ -1688,14 +1742,7 @@ const Finance = {
     App.confirm('撤销后这笔清算批次里的账目会恢复为「未清算」，确定？', async () => {
       const st = this._settleState;
       if (!st) return;
-      const txs = await DB.getByIndex('transactions', 'ledgerId', st.ledger.id);
-      for (const t of txs) {
-        if (t.settlementId === sid) {
-          delete t.settlementId;
-          await DB.put('transactions', t);
-        }
-      }
-      await DB.delete('settlements', sid);
+      await this._revertSettlementById(st.ledger, sid);
       App.toast('已撤销清算');
       this.showSettlement(st.ledger.id);
       this.render();
