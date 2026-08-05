@@ -2931,10 +2931,22 @@ const Home = {
 /* ============================================================
  *  主应用
  * ============================================================ */
+// ===== 个人模式：跳过登录界面，启动即自动用下列账号登录（个人使用）=====
+// 想恢复手动登录，把 PERSONAL_MODE 改为 false 即可。
+const PERSONAL_MODE = true;
+const PERSONAL_PHONE = '15989106650';
+const PERSONAL_PWD = '123456';
+
 const App = {
   currentPage: 'home',
 
   async init() {
+    const screen = document.getElementById('authScreen');
+    const app = document.getElementById('app');
+    if (PERSONAL_MODE) {
+      if (screen) screen.style.display = 'none';
+      if (app) app.style.display = '';
+    }
     if (Auth.token) {
       try {
         await Auth.verify();
@@ -2946,7 +2958,38 @@ const App = {
         Auth.clear();
       }
     }
+    if (PERSONAL_MODE) { await this.autoLogin(); return; }
     this.showLogin();
+  },
+
+  // 个人模式：用内置账号自动登录（账号不存在则自动注册），失败则退回本地模式
+  async autoLogin() {
+    const phone = PERSONAL_PHONE, pwd = PERSONAL_PWD;
+    try {
+      let r;
+      try {
+        r = await Auth.login(phone, pwd);
+      } catch (le) {
+        if (le && le.code === 'NO_ACCOUNT') {
+          await Auth.register(phone, pwd);
+          r = await Auth.login(phone, pwd);
+        } else {
+          throw le;
+        }
+      }
+      Auth.set(r.token, r.user.phone);
+      DB.setCloud(r.token);
+      await this.ensureSeed();
+      await this.boot();
+      this.maybeAutoMigrate();
+    } catch (e) {
+      // 云端不可用（离线 / Render 冷启动）→ 退回本地模式，保证 App 能打开
+      console.warn('个人模式自动登录失败，退回本地模式：', e);
+      Auth.clear();
+      DB.setLocal();
+      await this.boot();
+      this.toast('云端暂不可用，已用本地模式打开');
+    }
   },
 
   async boot() {
@@ -2972,6 +3015,7 @@ const App = {
   },
 
   showLogin() {
+    if (PERSONAL_MODE) { this.autoLogin(); return; }
     const screen = document.getElementById('authScreen');
     const app = document.getElementById('app');
     if (screen) screen.style.display = 'flex';
