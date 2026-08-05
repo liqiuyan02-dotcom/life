@@ -1257,14 +1257,95 @@ const Finance = {
   async renderStats() {
     const ledger = await this.getCurrentLedger();
     if (!ledger) return;
-    const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    const allTxs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    allTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // 总支出（未知金额不计入）
+    const dates = allTxs.map(t => t.date.slice(0, 10));
+    const minDate = dates.length ? dates.reduce((a, b) => a < b ? a : b) : Utils.todayStr();
+    const maxDate = dates.length ? dates.reduce((a, b) => a > b ? a : b) : Utils.todayStr();
+    this._statsState = { ledger, allTxs, minDate, maxDate };
+
+    let html = `
+      <div class="card">
+        <div class="card-title">📅 统计时间范围</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input type="date" class="form-input" id="statsStart" value="${minDate}" onchange="Finance.updateStats()" style="flex:1">
+          <span style="color:var(--text-light);font-size:13px">至</span>
+          <input type="date" class="form-input" id="statsEnd" value="${maxDate}" onchange="Finance.updateStats()" style="flex:1">
+        </div>
+        <div style="font-size:12px;color:var(--text-light)">勾选要参与统计的账目；已清算的默认不勾选，可手动重新勾选</div>
+      </div>
+      <div id="statsSummary"></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="card-title">📝 参与统计的账目</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-secondary" onclick="Finance.statsSelectAll(true)">全选</button>
+            <button class="btn btn-sm btn-secondary" onclick="Finance.statsSelectAll(false)">取消</button>
+          </div>
+        </div>
+        <div id="statsTxList"></div>
+        <div class="action-row" style="margin-top:12px">
+          <button class="btn btn-primary" onclick="Finance.statsSettle()">清算选中账目</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('financeContent').innerHTML = html;
+    this.updateStats();
+  },
+
+  updateStats() {
+    const st = this._statsState;
+    if (!st) return;
+    const start = document.getElementById('statsStart')?.value || st.minDate;
+    const end = document.getElementById('statsEnd')?.value || st.maxDate;
+    const listEl = document.getElementById('statsTxList');
+
+    const filtered = st.allTxs.filter(t => {
+      const d = t.date.slice(0, 10);
+      return d >= start && d <= end;
+    });
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><div class="text">该时间段暂无账目</div></div>`;
+      document.getElementById('statsSummary').innerHTML = '';
+      return;
+    }
+
+    let html = '';
+    for (const t of filtered) {
+      const cat = this.txCategories[t.categoryIdx] || this.txCategories[7];
+      const payer = st.ledger.members[t.payerIdx] || '?';
+      const checked = !t.settlementId ? 'checked' : '';
+      const settleTag = t.settlementId
+        ? `<span style="font-size:11px;color:var(--success);border:1px solid var(--success);border-radius:4px;padding:0 4px;margin-left:4px">已清算</span>`
+        : '';
+      html += `
+        <label class="settle-row" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+          <input type="checkbox" class="stats-tx-check" data-tx-id="${t.id}" ${checked} onchange="Finance.updateStatsSummary()">
+          <div class="list-item-icon icon-bg-${cat.color}" style="margin:0">${cat.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escape(t.note || cat.name)}${settleTag}</div>
+            <div style="font-size:12px;color:var(--text-secondary)">${Utils.formatDate(t.date)} · ${Utils.escape(payer)}付 · ${t.participantIdxs.length}人分摊</div>
+          </div>
+          <div style="font-weight:700;color:var(--text)">${t.amountUnknown ? '待定' : Utils.formatMoney(t.amount)}</div>
+        </label>`;
+    }
+    listEl.innerHTML = html;
+    this.updateStatsSummary();
+  },
+
+  updateStatsSummary() {
+    const st = this._statsState;
+    if (!st) return;
+    const checkedIds = new Set([...document.querySelectorAll('.stats-tx-check:checked')].map(c => c.dataset.txId));
+    const txs = st.allTxs.filter(t => checkedIds.has(t.id));
+
     const total = txs.reduce((s, t) => s + Utils.txAmt(t), 0);
     const unknownCount = txs.filter(t => t.amountUnknown).length;
 
-    // 按成员统计
-    const memberStats = ledger.members.map((m, i) => {
+    const memberStats = st.ledger.members.map((m, i) => {
       const paid = txs.filter(t => t.payerIdx === i).reduce((s, t) => s + Utils.txAmt(t), 0);
       const shouldPay = txs.filter(t => t.participantIdxs.includes(i)).reduce((s, t) => {
         if (t.splitType === 'equal') return s + Utils.txAmt(t) / t.participantIdxs.length;
@@ -1273,7 +1354,6 @@ const Finance = {
       return { name: m, paid, shouldPay, balance: paid - shouldPay };
     });
 
-    // 按分类统计
     const catStats = {};
     for (const tx of txs) {
       const cat = this.txCategories[tx.categoryIdx] || this.txCategories[7];
@@ -1284,9 +1364,9 @@ const Finance = {
 
     let html = `
       <div class="card" style="text-align:center">
-        <div style="font-size:13px;color:var(--text-secondary)">总支出</div>
+        <div style="font-size:13px;color:var(--text-secondary)">已选总支出</div>
         <div style="font-size:32px;font-weight:700;margin:4px 0">${Utils.formatMoney(total)}</div>
-        <div style="font-size:13px;color:var(--text-light)">${txs.length} 笔记录${unknownCount > 0 ? ` · <span style="color:var(--warning)">${unknownCount} 笔未知</span>` : ''}</div>
+        <div style="font-size:13px;color:var(--text-light)">${txs.length} 笔已勾选${unknownCount > 0 ? ` · <span style="color:var(--warning)">${unknownCount} 笔未知</span>` : ''}</div>
       </div>
 
       <div class="card">
@@ -1321,7 +1401,34 @@ const Finance = {
       html += `</div>`;
     }
 
-    document.getElementById('financeContent').innerHTML = html;
+    document.getElementById('statsSummary').innerHTML = html;
+  },
+
+  statsSelectAll(checked) {
+    document.querySelectorAll('.stats-tx-check').forEach(c => c.checked = checked);
+    this.updateStatsSummary();
+  },
+
+  async statsSettle() {
+    const st = this._statsState;
+    if (!st) return;
+    const ids = [...document.querySelectorAll('.stats-tx-check:checked')].map(c => c.dataset.txId);
+    if (ids.length === 0) { App.toast('请至少勾选一笔账目'); return; }
+    const sel = ids.map(id => st.allTxs.find(t => t.id === id)).filter(Boolean);
+    const { transfers } = this.computeSettlement(sel, st.ledger);
+    const total = sel.reduce((a, t) => a + Utils.txAmt(t), 0);
+    const sid = Utils.uid();
+    for (const t of sel) {
+      t.settlementId = sid;
+      await DB.put('transactions', t);
+    }
+    await DB.add('settlements', {
+      id: sid, ledgerId: st.ledger.id, date: new Date().toISOString(),
+      txIds: ids, transfers, total
+    });
+    App.toast(`已清算 ${ids.length} 笔账目`);
+    this.renderStats();
+    Home.render();
   },
 
   async renderMembers() {
