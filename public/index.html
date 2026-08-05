@@ -2197,7 +2197,7 @@ const Habits = {
         html += `
           <div class="checkin-item" style="cursor:pointer" onclick="Habits.deleteCheckin('${c.id}','${habit.id}')" title="点击撤销本次打卡">
             ${valStr}
-            <div class="ci-note">${(c.note && c.note !== '补卡') ? Utils.escape(c.note) : '<span style="color:var(--text-light)">无备注</span>'}</div>
+            <div class="ci-note">${(c.note && c.note !== '补卡') ? Utils.escape(c.note) : '<span style="color:var(--text-light)">打卡</span>'}</div>
             <div style="text-align:right">
               <div class="ci-time">${Utils.formatDateTime(c.timestamp)}</div>
               <div style="font-size:11px;color:var(--danger);margin-top:2px">点击撤销</div>
