@@ -1942,11 +1942,25 @@ const Finance = {
  *  打卡模块
  * ============================================================ */
 const Habits = {
-  habitIcons: ['💧','🏃','📚','💊','🌅','🧘','💪','✍️','🎸','🥗','😴','🚭','🦷','🧹','📞','💡'],
+  habitIcons: ['💧','🏃','📚','💊','🌅','🧘','💪','✍️','🎸','🥗','😴','🚭','🦷','🧹','📞','💡','⌚','🛵'],
   habitColors: ['#74b9ff','#00cec9','#55efc4','#fdcb6e','#fab1a0','#fd79a8','#a29bfe','#dfe6e9'],
+
+  // 按习惯名称固定图标（用户可自定义，但常用项默认显示更贴切的 emoji）
+  iconByName: { '手表充电': '⌚', '电车充电': '🛵' },
+  getIcon(h) { return this.iconByName[h.name] || h.icon || '✅'; },
 
   async init() {
     let habits = await DB.getAll('habits');
+
+    // 自动修正指定习惯图标
+    for (const h of habits) {
+      const fixed = this.iconByName[h.name];
+      if (fixed && h.icon !== fixed) {
+        h.icon = fixed;
+        await DB.put('habits', h);
+      }
+    }
+
     const defaults = [
       { name: '喝水', icon: '💧', color: 0, recordType: 'number', unit: '杯', target: 8 },
       { name: '跑步', icon: '🏃', color: 1, recordType: 'both', unit: '公里', target: null },
@@ -2021,7 +2035,7 @@ const Habits = {
 
       html += `
         <div class="habit-card">
-          <div class="hc-icon icon-bg-${h.color % 8}" onclick="Habits.showDetail('${h.id}')">${h.icon}</div>
+          <div class="hc-icon icon-bg-${h.color % 8}" onclick="Habits.showDetail('${h.id}')">${this.getIcon(h)}</div>
           <div class="hc-body" onclick="Habits.showDetail('${h.id}')">
             <div class="hc-name">${Utils.escape(h.name)}</div>
             <div class="hc-info">${info}</div>
@@ -2359,7 +2373,7 @@ const Habits = {
         <label class="form-label">图标</label>
         <div class="chip-group">
           ${this.habitIcons.map((icon, i) => `
-            <div class="chip ${h.icon === icon ? 'active' : ''}" onclick="App.selectChip(this,'habitIcon',${i})" data-icon="${icon}" style="font-size:18px;width:42px;height:42px;display:flex;align-items:center;justify-content:center">${icon}</div>
+            <div class="chip ${this.getIcon(h) === icon ? 'active' : ''}" onclick="App.selectChip(this,'habitIcon',${i})" data-icon="${icon}" style="font-size:18px;width:42px;height:42px;display:flex;align-items:center;justify-content:center">${icon}</div>
           `).join('')}
         </div>
       </div>
@@ -2401,7 +2415,7 @@ const Habits = {
       </div>
     `;
     App.openSheet(html);
-    this._habitForm = { icon: h.icon, color: h.color, recordType: h.recordType };
+    this._habitForm = { icon: this.getIcon(h), color: h.color, recordType: h.recordType };
   },
 
   _habitForm: { icon: '✅', color: 0, recordType: 'both' },
@@ -2803,7 +2817,7 @@ const Home = {
     const allCheckins = [];
     for (const h of habits) {
       const cs = await DB.getByIndex('checkins', 'habitId', h.id);
-      for (const c of cs) allCheckins.push({ day: c.timestamp.slice(0, 10), icon: h.icon });
+      for (const c of cs) allCheckins.push({ day: c.timestamp.slice(0, 10), icon: Habits.getIcon(h) });
     }
     const checkinByDay = {};
     for (const c of allCheckins) {
