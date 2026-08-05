@@ -184,8 +184,9 @@ app.post('/api/auth/login', async (req, res) => {
   const { phone, password } = req.body || {};
   const db = await loadDB();
   const u = db.users[phone];
-  if (!u || !verifyPassword(String(password || ''), u.salt, u.passwordHash)) {
-    return res.status(401).json({ error: '手机号或密码错误' });
+  if (!u) return res.status(404).json({ error: '账号不存在，将自动创建', code: 'NO_ACCOUNT' });
+  if (!verifyPassword(String(password || ''), u.salt, u.passwordHash)) {
+    return res.status(401).json({ error: '密码错误', code: 'WRONG_PWD' });
   }
   const token = signToken(u.id, String(phone));
   res.json({ token, user: { id: u.id, phone: String(phone) } });

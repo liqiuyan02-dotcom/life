@@ -1011,7 +1011,7 @@ async function authFetch(url, body) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: ctrl.signal
     });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || '请求失败'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); const err = new Error(e.error || '请求失败'); err.code = e.code || null; err.status = r.status; throw err; }
     return r.json();
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('连接服务器超时，请确认「服务端地址」已填写且服务已启动');
@@ -3004,14 +3004,28 @@ const App = {
     if (!pwd || pwd.length < 4) { this.toast('密码至少 4 位'); return; }
     if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
     try {
-      const r = this._authMode === 'register'
-        ? await Auth.register(phone, pwd)
-        : await Auth.login(phone, pwd);
+      let r, autoRegistered = false;
+      if (this._authMode === 'register') {
+        r = await Auth.register(phone, pwd);
+      } else {
+        try {
+          r = await Auth.login(phone, pwd);
+        } catch (le) {
+          // 云端账号不存在（多为实例重启后数据被清空）→ 自动注册后登录，避免「登录不了」
+          if (le && le.code === 'NO_ACCOUNT') {
+            await Auth.register(phone, pwd);
+            r = await Auth.login(phone, pwd);
+            autoRegistered = true;
+          } else {
+            throw le;
+          }
+        }
+      }
       Auth.set(r.token, r.user.phone);
       DB.setCloud(r.token);
       await this.ensureSeed();
       await this.boot();
-      this.toast(this._authMode === 'register' ? '注册成功，已登录' : '登录成功');
+      this.toast(autoRegistered ? '账号已自动创建并登录' : (this._authMode === 'register' ? '注册成功，已登录' : '登录成功'));
       this.maybeAutoMigrate();
     } catch (e) {
       this.toast(e.message || '操作失败，请确认服务端地址已填写且服务已启动');
