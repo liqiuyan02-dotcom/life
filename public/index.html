@@ -1472,7 +1472,7 @@ const Finance = {
     const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
     for (const t of txs) {
       if (t.settlementId === sid) {
-        delete t.settlementId;
+        t.settlementId = null;
         await DB.put('transactions', t);
       }
     }
