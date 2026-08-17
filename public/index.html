@@ -276,6 +276,9 @@ input[type="number"] { -webkit-appearance: none; }
 .list-item-sub { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
 .list-item-right { text-align: right; flex-shrink: 0; }
 .list-item-amount { font-size: 16px; font-weight: 600; }
+.quick-fill { display:flex; align-items:center; gap:4px; }
+.qf-input { width:62px; font-size:15px; padding:5px 6px; border:1px solid var(--warning); border-radius:6px; text-align:right; background:#fff; }
+.qf-btn { font-size:13px; padding:5px 10px; border:none; border-radius:6px; background:var(--warning); color:#fff; font-weight:600; }
 .list-item-time { font-size: 12px; color: var(--text-light); }
 
 /* ========== 空状态 ========== */
@@ -1245,13 +1248,31 @@ const Finance = {
               <div class="list-item-sub">${Utils.escape(payer)} 付款 · ${tx.participantIdxs.length}人分摊</div>
             </div>
             <div class="list-item-right">
-              <div class="list-item-amount">${amtHtml}</div>
+              ${tx.amountUnknown ? `
+                <div class="quick-fill" onclick="event.stopPropagation()">
+                  <input class="qf-input" type="number" inputmode="decimal" placeholder="金额" id="qf_${tx.id}" onclick="event.stopPropagation()">
+                  <button class="qf-btn" onclick="Finance.quickFillAmount('${tx.id}')">填</button>
+                </div>` : `<div class="list-item-amount">${amtHtml}</div>`}
               <div class="list-item-time">${Utils.formatTime(tx.date)}</div>
             </div>
           </div>
         </div>`;
     }
     el.innerHTML = html;
+  },
+
+  // 金额未知的账单，在列表内快速补全金额（不用进编辑页）
+  async quickFillAmount(id) {
+    const inp = document.getElementById('qf_' + id);
+    const v = parseFloat(inp && inp.value);
+    if (!v || v <= 0) { App.toast('请输入有效金额'); return; }
+    const tx = await DB.get('transactions', id);
+    if (!tx) { App.toast('账目不存在'); return; }
+    tx.amountUnknown = false;
+    tx.amount = v;
+    await DB.put('transactions', tx);
+    App.toast('已补全金额 ' + Utils.formatMoney(v));
+    this.renderList();
   },
 
   async renderStats() {
