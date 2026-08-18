@@ -325,6 +325,15 @@ input[type="number"] { -webkit-appearance: none; }
 .quick-fill { display:flex; align-items:center; gap:4px; }
 .qf-input { width:62px; font-size:15px; padding:5px 6px; border:1px solid var(--warning); border-radius:6px; text-align:right; background:#fff; }
 .qf-btn { font-size:13px; padding:5px 10px; border:none; border-radius:6px; background:var(--warning); color:#fff; font-weight:600; }
+/* ========== 记账照片留存 ========== */
+.photo-btn { flex:none; width:42px; height:42px; border-radius:10px; background:var(--bg); border:1px dashed var(--border); font-size:20px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary); }
+.photo-btn:active { background:var(--primary-light); }
+.photo-preview { position:relative; display:inline-block; margin-top:8px; }
+.photo-preview img { width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid var(--border); display:block; cursor:zoom-in; }
+.photo-preview .photo-remove { position:absolute; top:-7px; right:-7px; width:22px; height:22px; border-radius:50%; background:var(--danger); color:#fff; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center; }
+.tx-thumb { flex:none; width:44px; height:44px; border-radius:8px; object-fit:cover; border:1px solid var(--border); cursor:zoom-in; }
+.photo-viewer-wrap { text-align:center; padding:6px 0 10px; }
+.photo-viewer-wrap img { max-width:100%; max-height:66vh; border-radius:12px; box-shadow:var(--shadow-lg); }
 .bulk-cal-head { display:flex; align-items:center; justify-content:space-between; margin:4px 0 10px; }
 .bulk-cal-title { font-weight:600; }
 .cal-nav { width:34px; height:34px; border-radius:50%; border:1px solid var(--border); background:#fff; font-size:20px; line-height:1; color:var(--text); }
@@ -1319,6 +1328,7 @@ const Finance = {
                 </div>` : `<div class="list-item-amount">${amtHtml}</div>`}
               <div class="list-item-time">${Utils.formatTime(tx.date)}</div>
             </div>
+            ${tx.photo ? `<img class="tx-thumb" src="${tx.photo}" onclick="event.stopPropagation();Finance.viewPhoto(this.src)">` : ''}
           </div>
         </div>`;
     }
@@ -1893,7 +1903,11 @@ const Finance = {
 
       <div class="form-group">
         <label class="form-label">备注</label>
-        <input class="form-input" id="txNote" placeholder="写点什么..." value="${Utils.escape(tx.note || '')}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input class="form-input" id="txNote" placeholder="写点什么..." value="${Utils.escape(tx.note || '')}" style="flex:1">
+          <button type="button" class="photo-btn" onclick="Finance.attachPhoto()" title="拍照/上传照片留存">📷</button>
+        </div>
+        <div id="txPhotoPreview">${tx.photo ? `<div class="photo-preview"><img src="${tx.photo}" onclick="Finance.viewPhoto(this.src)"><button type="button" class="photo-remove" onclick="Finance.removePhoto()">✕</button></div>` : ''}</div>
       </div>
 
       <div class="form-group">
@@ -1954,10 +1968,10 @@ const Finance = {
     App.openSheet(html);
     // 保存当前表单状态
     this._formLedger = ledger;
-    this._formState = { categoryIdx: tx.categoryIdx, payerIdx: tx.payerIdx, participantIdxs: [...tx.participantIdxs], splitType: tx.splitType, amountUnknown: !!tx.amountUnknown, splitRatios: { ...(tx.splitRatios || {}) } };
+    this._formState = { categoryIdx: tx.categoryIdx, payerIdx: tx.payerIdx, participantIdxs: [...tx.participantIdxs], splitType: tx.splitType, amountUnknown: !!tx.amountUnknown, splitRatios: { ...(tx.splitRatios || {}) }, photo: tx.photo || null };
   },
 
-  _formState: { categoryIdx: 0, payerIdx: 0, participantIdxs: [], splitType: 'equal', amountUnknown: false },
+  _formState: { categoryIdx: 0, payerIdx: 0, participantIdxs: [], splitType: 'equal', amountUnknown: false, photo: null },
 
   selectSplitType(type, el) {
     this._formState.splitType = type;
@@ -2021,6 +2035,7 @@ const Finance = {
       splitRatios,
       note,
       date,
+      photo: fs.photo || null,
       settlementId: existing ? (existing.settlementId || null) : null
     };
 
@@ -2029,6 +2044,73 @@ const Finance = {
     App.toast(editId ? '已更新' : '已记账');
     this.render();
     Home.render();
+  },
+
+  // ===== 记账照片留存 =====
+  attachPhoto() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const dataUrl = await this._compressImage(file);
+        this._formState.photo = dataUrl;
+        this._renderPhotoPreview(dataUrl);
+        App.toast('照片已添加');
+      } catch (err) {
+        App.toast('照片处理失败：' + (err && err.message ? err.message : err));
+      }
+    };
+    input.click();
+  },
+
+  _compressImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = 1080;
+          const scale = Math.min(1, maxW / (img.width || maxW));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.72));
+        };
+        img.onerror = () => reject(new Error('图片读取失败'));
+        img.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  },
+
+  _renderPhotoPreview(dataUrl) {
+    const box = document.getElementById('txPhotoPreview');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="photo-preview">
+        <img src="${dataUrl}" onclick="Finance.viewPhoto(this.src)">
+        <button type="button" class="photo-remove" onclick="Finance.removePhoto()">✕</button>
+      </div>`;
+  },
+
+  removePhoto() {
+    this._formState.photo = null;
+    const box = document.getElementById('txPhotoPreview');
+    if (box) box.innerHTML = '';
+    App.toast('已移除照片');
+  },
+
+  viewPhoto(src) {
+    App.openSheet(`
+      <div class="sheet-handle"></div>
+      <div class="photo-viewer-wrap"><img src="${src}" onclick="App.closeSheet()"></div>
+    `);
   },
 
   async deleteTransaction(id) {
