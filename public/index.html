@@ -1488,10 +1488,12 @@ const Finance = {
     const { transfers } = this.computeSettlement(sel, st.ledger);
     const total = sel.reduce((a, t) => a + Utils.txAmt(t), 0);
     const sid = Utils.uid();
+    const settlePuts = [];
     for (const t of sel) {
       t.settlementId = sid;
-      await DB.put('transactions', t);
+      settlePuts.push(DB.put('transactions', t));
     }
+    await Promise.all(settlePuts);
     await DB.add('settlements', {
       id: sid, ledgerId: st.ledger.id, date: new Date().toISOString(),
       txIds: ids, transfers, total
@@ -1503,12 +1505,14 @@ const Finance = {
 
   async _revertSettlementById(ledger, sid) {
     const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    const revertPuts = [];
     for (const t of txs) {
       if (t.settlementId === sid) {
         t.settlementId = null;
-        await DB.put('transactions', t);
+        revertPuts.push(DB.put('transactions', t));
       }
     }
+    await Promise.all(revertPuts);
     await DB.delete('settlements', sid);
   },
 
@@ -1757,10 +1761,12 @@ const Finance = {
     const { transfers } = this.computeSettlement(sel, st.ledger);
     const total = sel.reduce((a, t) => a + Utils.txAmt(t), 0);
     const sid = Utils.uid();
+    const settlePuts = [];
     for (const t of sel) {
       t.settlementId = sid;
-      await DB.put('transactions', t);
+      settlePuts.push(DB.put('transactions', t));
     }
+    await Promise.all(settlePuts);
     await DB.add('settlements', {
       id: sid, ledgerId: st.ledger.id, date: new Date().toISOString(),
       txIds: ids, transfers, total
@@ -2204,11 +2210,14 @@ const Habits = {
       return;
     }
 
-    // 获取今日打卡
+    // 获取今日打卡（一次性拉全部打卡，按习惯分组，避免逐习惯发请求）
+    const allCheckins = await DB.getAll('checkins');
+    const checkinByHabit = {};
+    for (const c of allCheckins) { (checkinByHabit[c.habitId] = checkinByHabit[c.habitId] || []).push(c); }
     const today = Utils.todayStr();
     let html = '';
     for (const h of habits) {
-      const checkins = await DB.getByIndex('checkins', 'habitId', h.id);
+      const checkins = checkinByHabit[h.id] || [];
       const todayCheckins = checkins.filter(c => c.timestamp.slice(0, 10) === today);
       const done = todayCheckins.length > 0;
       const streak = this._calcStreak(checkins);
@@ -3040,11 +3049,14 @@ const Home = {
     const monthTotal = monthTx.reduce((s, t) => s + Utils.txAmt(t), 0);
 
     const habits = await DB.getAll('habits');
+    const allCheckins = await DB.getAll('checkins'); // 一次性拉全部打卡，避免逐习惯发请求
+    const checkinByHabit = {};
+    for (const c of allCheckins) { (checkinByHabit[c.habitId] = checkinByHabit[c.habitId] || []).push(c); }
     const today = Utils.todayStr();
     let habitDone = 0;
     for (const h of habits) {
-      const checkins = await DB.getByIndex('checkins', 'habitId', h.id);
-      if (checkins.some(c => c.timestamp.slice(0, 10) === today)) habitDone++;
+      const cs = checkinByHabit[h.id] || [];
+      if (cs.some(c => c.timestamp.slice(0, 10) === today)) habitDone++;
     }
 
     const notes = await DB.getAll('notes');
@@ -3063,13 +3075,13 @@ const Home = {
     `;
 
     // 日历数据聚合（跨月缓存，供切换月份复用）
-    const allCheckins = [];
+    const calCheckins = [];
     for (const h of habits) {
-      const cs = await DB.getByIndex('checkins', 'habitId', h.id);
-      for (const c of cs) allCheckins.push({ day: c.timestamp.slice(0, 10), icon: Habits.getIcon(h) });
+      const cs = checkinByHabit[h.id] || [];
+      for (const c of cs) calCheckins.push({ day: c.timestamp.slice(0, 10), icon: Habits.getIcon(h) });
     }
     const checkinByDay = {};
-    for (const c of allCheckins) {
+    for (const c of calCheckins) {
       (checkinByDay[c.day] = checkinByDay[c.day] || []).push(c.icon);
     }
     const spendByDay = {};
