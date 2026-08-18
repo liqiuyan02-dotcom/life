@@ -279,6 +279,18 @@ input[type="number"] { -webkit-appearance: none; }
 .quick-fill { display:flex; align-items:center; gap:4px; }
 .qf-input { width:62px; font-size:15px; padding:5px 6px; border:1px solid var(--warning); border-radius:6px; text-align:right; background:#fff; }
 .qf-btn { font-size:13px; padding:5px 10px; border:none; border-radius:6px; background:var(--warning); color:#fff; font-weight:600; }
+.bulk-cal-head { display:flex; align-items:center; justify-content:space-between; margin:4px 0 10px; }
+.bulk-cal-title { font-weight:600; }
+.cal-nav { width:34px; height:34px; border-radius:50%; border:1px solid var(--border); background:#fff; font-size:20px; line-height:1; color:var(--text); }
+.bulk-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+.bulk-wd { text-align:center; font-size:12px; color:var(--text-light); padding:4px 0; }
+.bulk-cell { position:relative; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; border-radius:9px; border:1px solid var(--border); font-size:14px; background:#fff; }
+.bulk-cell.empty { background:transparent; border:none; }
+.bulk-cell.sel { background:var(--primary); color:#fff; border-color:var(--primary); font-weight:600; }
+.bulk-cell.ex { background:rgba(0,184,148,0.12); color:var(--success); }
+.bulk-cell.today { box-shadow:0 0 0 2px var(--warning) inset; }
+.bulk-cell .tick { position:absolute; top:1px; right:4px; font-size:10px; }
+.bulk-sel-info { margin-top:10px; font-size:13px; color:var(--text-secondary); }
 .list-item-time { font-size: 12px; color: var(--text-light); }
 
 /* ========== 空状态 ========== */
@@ -2413,18 +2425,18 @@ const Habits = {
   },
 
   showBulkCheckin(habitId) {
-    const curYear = new Date().getFullYear();
+    const now = new Date();
+    this._bulkYear = now.getFullYear();
+    this._bulkMonth = now.getMonth();
+    this._bulkSel = new Set();
     const html = `
       <div class="sheet-handle"></div>
       <div class="sheet-title">📅 批量补打卡</div>
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">每行或空格分隔，格式 <b>月/日</b>（如 5/12）。已存在该天的打卡会自动跳过，不会重复。</div>
-      <div class="form-group">
-        <label class="form-label">年份</label>
-        <input class="form-input" id="bulkYear" type="number" value="${curYear}" style="max-width:120px">
-      </div>
-      <div class="form-group">
-        <label class="form-label">日期列表</label>
-        <textarea id="bulkDates" class="form-input" rows="6" style="width:100%;font-size:15px;line-height:1.6" placeholder="5/12 5/14 6/4 ...">5/12 5/14 6/4 6/19 6/30 7/2 7/3 7/6 7/9 7/10</textarea>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">在日历上点选要补卡的日期即可（已打卡的日期标 ✓，再点一下可取消选择）。点「确认补卡」一次性写入所有选中日期。</div>
+      <div id="bulkCalBox"></div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">或手动输入补充（每行/空格分隔，格式 月/日 如 5/12；留空则只用日历选择）</label>
+        <textarea id="bulkDates" class="form-input" rows="3" style="width:100%;font-size:15px;line-height:1.6" placeholder="5/12 5/14 6/4 ..."></textarea>
       </div>
       <div class="action-row">
         <button class="btn btn-secondary" onclick="App.closeSheet()">取消</button>
@@ -2432,30 +2444,87 @@ const Habits = {
       </div>
     `;
     App.openSheet(html);
+    this.renderBulkCalendar(habitId);
+  },
+
+  async renderBulkCalendar(habitId) {
+    const year = this._bulkYear, month = this._bulkMonth;
+    const existing = await DB.getByIndex('checkins', 'habitId', habitId);
+    const existDays = new Set(existing.map(c => c.timestamp.slice(0, 10)));
+    const startW = new Date(year, month, 1).getDay();
+    const days = new Date(year, month + 1, 0).getDate();
+    const today = Utils.todayStr();
+    let cells = '';
+    for (let i = 0; i < startW; i++) cells += '<div class="bulk-cell empty"></div>';
+    for (let d = 1; d <= days; d++) {
+      const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isEx = existDays.has(ds);
+      const isSel = this._bulkSel.has(ds);
+      const isToday = ds === today;
+      const cls = 'bulk-cell' + (isSel ? ' sel' : '') + (isEx ? ' ex' : '') + (isToday ? ' today' : '');
+      cells += `<div class="${cls}" onclick="Habits.toggleBulkDate('${habitId}','${ds}')">${d}${isEx ? '<span class="tick">✓</span>' : ''}</div>`;
+    }
+    const box = document.getElementById('bulkCalBox');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="bulk-cal-head">
+        <button class="cal-nav" onclick="Habits.bulkMonthShift('${habitId}',-1)">‹</button>
+        <span class="bulk-cal-title">${year}年${month + 1}月</span>
+        <button class="cal-nav" onclick="Habits.bulkMonthShift('${habitId}',1)">›</button>
+      </div>
+      <div class="bulk-cal-grid">
+        ${['日', '一', '二', '三', '四', '五', '六'].map(w => `<div class="bulk-wd">${w}</div>`).join('')}
+        ${cells}
+      </div>
+      <div class="bulk-sel-info">已选 <b>${this._bulkSel.size}</b> 天${this._bulkSel.size ? `（${[...this._bulkSel].sort().join('、')}）` : ''}</div>
+    `;
+  },
+
+  toggleBulkDate(habitId, ds) {
+    if (this._bulkSel.has(ds)) this._bulkSel.delete(ds);
+    else this._bulkSel.add(ds);
+    this.renderBulkCalendar(habitId);
+  },
+
+  async bulkMonthShift(habitId, dir) {
+    let m = this._bulkMonth + dir, y = this._bulkYear;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    this._bulkMonth = m; this._bulkYear = y;
+    await this.renderBulkCalendar(habitId);
   },
 
   async saveBulkCheckin(habitId) {
     const habit = await DB.get('habits', habitId);
-    const year = parseInt(document.getElementById('bulkYear').value) || new Date().getFullYear();
-    const raw = document.getElementById('bulkDates').value;
-    const tokens = raw.split(/[\s,，、]+/).filter(Boolean);
+    const year = this._bulkYear || new Date().getFullYear();
     const existing = await DB.getByIndex('checkins', 'habitId', habitId);
     const existingDays = new Set(existing.map(c => c.timestamp.slice(0, 10)));
     let added = 0, skipped = 0, invalid = 0;
     const toAdd = [];
+    // 1) 日历选中的日期
+    for (const ds of this._bulkSel) {
+      if (existingDays.has(ds)) { skipped++; continue; }
+      const dt = new Date(ds + 'T12:00:00');
+      if (isNaN(dt)) { invalid++; continue; }
+      toAdd.push({ id: Utils.uid(), habitId, value: null, note: '', timestamp: dt.toISOString() });
+      existingDays.add(ds); added++;
+    }
+    // 2) 文本框补充（格式 月/日）
+    const raw = (document.getElementById('bulkDates') || {}).value || '';
+    const tokens = raw.split(/[\s,，、]+/).filter(Boolean);
     for (const t of tokens) {
-      const m = t.trim().match(/^(\d{1,2})\/(\d{1,2})$/);
-      if (!m) { invalid++; continue; }
-      const mo = parseInt(m[1]), da = parseInt(m[2]);
+      const mm = t.trim().match(/^(\d{1,2})\/(\d{1,2})$/);
+      if (!mm) { invalid++; continue; }
+      const mo = parseInt(mm[1]), da = parseInt(mm[2]);
       const dt = new Date(year, mo - 1, da, 12, 0, 0);
       if (dt.getFullYear() !== year || dt.getMonth() !== mo - 1 || dt.getDate() !== da) { invalid++; continue; }
       const dayStr = `${year}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
       if (existingDays.has(dayStr)) { skipped++; continue; }
       toAdd.push({ id: Utils.uid(), habitId, value: null, note: '', timestamp: dt.toISOString() });
-      existingDays.add(dayStr);
-      added++;
+      existingDays.add(dayStr); added++;
     }
     for (const c of toAdd) await DB.add('checkins', c);
+    this._bulkSel = new Set();
     App.closeSheet();
     let msg = `已补 ${added} 条`;
     if (skipped) msg += `，跳过 ${skipped} 条已存在`;
