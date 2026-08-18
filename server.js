@@ -20,6 +20,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3001;
 const SECRET = process.env.SECRET || 'workbench-dev-secret-change-me';
 const USE_PG = !!process.env.DATABASE_URL;
+const BUILD_VERSION = '1.2.0';
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 
 // ---------- PostgreSQL 连接（可选）----------
@@ -36,6 +37,18 @@ if (USE_PG) {
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
+
+// 基础安全响应头（宽松 CSP：允许内联脚本/样式以兼容单文件应用，但限制资源来源）
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'"
+  );
+  next();
+});
 
 // 允许跨域（前端与后端可能不同源，同源时此配置无害）
 app.use((req, res, next) => {
@@ -197,7 +210,7 @@ app.get('/api/me', authMiddleware, (req, res) => {
 });
 
 // ---------- 健康检查（公开，必须放在通用 /api/:store 之前）----------
-app.get('/api/health', (req, res) => res.json({ ok: true, storage: USE_PG ? 'postgres' : 'file' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, storage: USE_PG ? 'postgres' : 'file', buildVersion: BUILD_VERSION }));
 
 // ---------- 种子 ----------
 app.post('/api/seed-defaults', authMiddleware, async (req, res) => {
@@ -305,6 +318,59 @@ app.delete('/api/:store/:id', authMiddleware, async (req, res) => {
   b[store] = b[store].filter(it => it.id !== id);
   await saveDB(db);
   res.json({ ok: true, deleted: before - b[store].length });
+});
+
+// ---------- PWA：manifest / service worker / 图标 ----------
+const MANIFEST = {
+  name: '我的生活台',
+  short_name: '生活台',
+  description: '记账 · 打卡 · 笔记',
+  start_url: '/',
+  display: 'standalone',
+  background_color: '#f0f2f5',
+  theme_color: '#00b894',
+  icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }]
+};
+app.get('/manifest.webmanifest', (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.json(MANIFEST);
+});
+app.get('/icon.svg', (req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#00b894"/><text x="96" y="132" font-size="104" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">台</text></svg>');
+});
+const SW_JS = `
+const CACHE = 'life-tai-v1';
+const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(() => {}));
+  self.skipWaiting();
+});
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+  );
+});
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.pathname.startsWith('/api')) return;
+  e.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req).then((resp) => {
+      if (resp && resp.status === 200) {
+        const copy = resp.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+      }
+      return resp;
+    }).catch(() => caches.match('/')))
+  );
+});
+`;
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(SW_JS);
 });
 
 // ---------- 前端静态托管（同源部署）----------

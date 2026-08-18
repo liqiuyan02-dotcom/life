@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#00b894">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="我的生活台">
 <title>我的生活台</title>
 <style>
 /* ========== CSS 变量 ========== */
@@ -44,6 +46,50 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ========== 连接状态栏 ========== */
+.conn-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 200;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  transform: translateY(-100%);
+  transition: transform .25s ease;
+  backdrop-filter: blur(4px);
+}
+.conn-bar.show { transform: translateY(0); }
+.conn-bar .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; flex: none; }
+.conn-bar.connecting { background: rgba(253,203,110,.95); color: #5a4500; }
+.conn-bar.connecting .dot { background: #5a4500; animation: connPulse 1s infinite; }
+.conn-bar.cloud { background: rgba(0,184,148,.95); }
+.conn-bar.local { background: rgba(99,110,114,.92); }
+.conn-bar.error { background: rgba(214,48,49,.96); }
+.conn-bar .retry-btn {
+  margin-left: auto; background: rgba(255,255,255,.25); color: #fff;
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600;
+}
+.conn-bar.error .retry-btn { background: #fff; color: #d63031; }
+@keyframes connPulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* ========== 版本更新提示 ========== */
+.sw-update {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+  background: var(--primary); color: #fff; font-size: 13px;
+  padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+  transform: translateY(-100%); transition: transform .3s ease;
+  box-shadow: var(--shadow);
+}
+.sw-update.show { transform: translateY(0); }
+.sw-update button {
+  margin-left: auto; background: #fff; color: var(--primary);
+  border-radius: 6px; padding: 5px 12px; font-weight: 600; font-size: 12px;
 }
 input, textarea, select, button { font-family: inherit; font-size: inherit; }
 button { cursor: pointer; border: none; background: none; }
@@ -712,6 +758,8 @@ input[type="number"] { -webkit-appearance: none; }
 </style>
 </head>
 <body>
+  <div id="connBar" class="conn-bar"><span class="dot"></span><span class="conn-text">正在连接云端…</span></div>
+  <div id="swUpdate" class="sw-update"><span>发现新版本，点击刷新以更新</span><button onclick="location.reload()">立即刷新</button></div>
 <div id="app">
   <!-- ===== 页面容器 ===== -->
   <div class="page-container" id="pageContainer">
@@ -3215,6 +3263,7 @@ const Home = {
 const PERSONAL_MODE = true;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
+const BUILD_VERSION = '1.2.0';
 
 const App = {
   currentPage: 'home',
@@ -3228,6 +3277,8 @@ const App = {
       if (screen) screen.style.display = 'none';
       if (app) app.style.display = '';
     }
+    // 进入登录/连接流程时先给出透明状态，避免冷启动期间白屏无反馈
+    if (Auth.token || PERSONAL_MODE) this.updateConn('connecting', '正在连接云端…');
     if (Auth.token) {
       try {
         await Auth.verify();
@@ -3246,31 +3297,42 @@ const App = {
   // 个人模式：用内置账号自动登录（账号不存在则自动注册），失败则退回本地模式
   async autoLogin() {
     const phone = PERSONAL_PHONE, pwd = PERSONAL_PWD;
-    try {
-      let r;
+    const maxRetry = 4;
+    for (let attempt = 1; attempt <= maxRetry; attempt++) {
+      this.updateConn('connecting', attempt > 1 ? `正在连接云端…（第 ${attempt} 次重试）` : '正在连接云端…');
       try {
-        r = await Auth.login(phone, pwd);
-      } catch (le) {
-        if (le && le.code === 'NO_ACCOUNT') {
-          await Auth.register(phone, pwd);
+        let r;
+        try {
           r = await Auth.login(phone, pwd);
-        } else {
-          throw le;
+        } catch (le) {
+          if (le && le.code === 'NO_ACCOUNT') {
+            await Auth.register(phone, pwd);
+            r = await Auth.login(phone, pwd);
+          } else {
+            throw le;
+          }
+        }
+        Auth.set(r.token, r.user.phone);
+        DB.setCloud(r.token);
+        await this.ensureSeed();
+        await this.boot();
+        this.maybeAutoMigrate();
+        return;
+      } catch (e) {
+        console.warn('个人模式自动登录第 ' + attempt + ' 次失败：', e);
+        if (attempt < maxRetry) {
+          const wait = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+          await new Promise(res => setTimeout(res, wait));
         }
       }
-      Auth.set(r.token, r.user.phone);
-      DB.setCloud(r.token);
-      await this.ensureSeed();
-      await this.boot();
-      this.maybeAutoMigrate();
-    } catch (e) {
-      // 云端不可用（离线 / Render 冷启动）→ 退回本地模式，保证 App 能打开
-      console.warn('个人模式自动登录失败，退回本地模式：', e);
-      Auth.clear();
-      DB.setLocal();
-      await this.boot();
-      this.toast('云端暂不可用，已用本地模式打开');
     }
+    // 云端持续不可用（离线 / Render 冷启动超时）→ 退回本地模式，保证 App 能打开
+    console.warn('个人模式自动登录失败，退回本地模式');
+    Auth.clear();
+    DB.setLocal();
+    await this.boot();
+    this.updateConn('local');
+    this.toast('云端暂不可用，已用本地模式打开（数据仅存本设备）');
   },
 
   async boot() {
@@ -3286,6 +3348,9 @@ const App = {
     const app = document.getElementById('app');
     if (screen) screen.style.display = 'none';
     if (app) app.style.display = '';
+    this.updateConn(DB.mode === 'cloud' ? 'cloud' : 'local');
+    this.registerSW();
+    this.checkBuildVersion();
   },
 
   ensureSeed() {
@@ -3407,6 +3472,106 @@ const App = {
     this._toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
   },
 
+  // ===== 连接状态栏（透明化云端连接状态）=====
+  updateConn(status, detail) {
+    const bar = document.getElementById('connBar');
+    if (!bar) return;
+    clearTimeout(this._connTimer);
+    const oldBtn = bar.querySelector('.retry-btn');
+    if (oldBtn) oldBtn.remove();
+    bar.className = 'conn-bar show ' + status;
+    const txt = bar.querySelector('.conn-text');
+    if (status === 'cloud') {
+      const t = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      txt.textContent = (detail || ('已同步云端 · ' + (Auth.phone || ''))) + ' · ' + t;
+      this._connTimer = setTimeout(() => bar.classList.remove('show'), 3500);
+      return;
+    }
+    if (status === 'local') {
+      txt.textContent = detail || '本地模式 · 数据仅存本设备';
+      return;
+    }
+    if (status === 'error') {
+      txt.textContent = detail || '云端连接失败';
+      const btn = document.createElement('button');
+      btn.className = 'retry-btn';
+      btn.textContent = '重试';
+      btn.onclick = () => { this.autoLogin(); };
+      bar.appendChild(btn);
+      return;
+    }
+    // connecting
+    txt.textContent = detail || '正在连接云端…';
+  },
+
+  // ===== Service Worker 注册（PWA 离线壳）=====
+  registerSW() {
+    if (!('serviceWorker' in navigator)) return;
+    if (location.protocol === 'file:') return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (nw) nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              document.getElementById('swUpdate').classList.add('show');
+            }
+          });
+        });
+      }).catch(() => {});
+    });
+  },
+
+  // ===== 版本更新提示 =====
+  checkBuildVersion() {
+    try {
+      const prev = localStorage.getItem('wb_build_version');
+      if (prev && prev !== BUILD_VERSION) this.toast('已更新到 v' + BUILD_VERSION);
+      localStorage.setItem('wb_build_version', BUILD_VERSION);
+    } catch (e) {}
+  },
+
+  // ===== CSV（Excel 兼容）导出 =====
+  exportCsv() {
+    (async () => {
+      const txs = await DB.getAll('transactions');
+      const habits = await DB.getAll('habits');
+      const hMap = {}; habits.forEach(h => hMap[h.id] = h.name);
+      const ledgers = await DB.getAll('ledgers');
+      const lMap = {}; ledgers.forEach(l => lMap[l.id] = l.name);
+      const cats = await DB.getAll('categories');
+      const cMap = {}; cats.forEach(c => cMap[c.id] = c.name);
+      const txHeader = ['日期', '类型', '金额', '账本', '分类', '备注', '是否清算'];
+      const txRows = txs.map(t => [
+        (t.date || '').slice(0, 10),
+        t.type === 'income' ? '收入' : '支出',
+        t.amountUnknown ? '未知' : (t.amount || 0),
+        lMap[t.ledgerId] || '',
+        cMap[t.categoryId] || '',
+        (t.note || '').replace(/[,\n]/g, ' '),
+        t.settlementId ? '已清算' : '未清算'
+      ]);
+      const checkins = await DB.getAll('checkins');
+      const chHeader = ['日期', '打卡项', '备注'];
+      const chRows = checkins.map(c => [
+        (c.timestamp || '').slice(0, 10),
+        hMap[c.habitId] || '',
+        (c.note || '').replace(/[,\n]/g, ' ')
+      ]);
+      const toCsv = (h, rows) => '﻿' + [h.join(','), ...rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(','))].join('\r\n');
+      this._downloadFile('生活台账目_' + Utils.todayStr() + '.csv', toCsv(txHeader, txRows), 'text/csv;charset=utf-8');
+      this._downloadFile('生活台打卡_' + Utils.todayStr() + '.csv', toCsv(chHeader, chRows), 'text/csv;charset=utf-8');
+      this.toast('已导出账目与打卡 Excel 表（CSV）');
+    })();
+  },
+  _downloadFile(name, content, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
   // ===== 确认弹窗 =====
   _confirmCb: null,
   confirm(text, cb) {
@@ -3524,7 +3689,12 @@ const App = {
         </div>
         <div class="setting-item" onclick="App.importData()">
           <div class="si-icon">📥</div>
-          <div class="si-label">从文件导入数据</div>
+          <div class="si-label">从文件导入数据（合并）</div>
+          <div class="si-arrow">›</div>
+        </div>
+        <div class="setting-item" onclick="App.exportCsv()">
+          <div class="si-icon">📊</div>
+          <div class="si-label">导出账目/打卡 Excel 表（CSV）</div>
           <div class="si-arrow">›</div>
         </div>
         <div class="setting-item" onclick="App.migrateToCloud()">
@@ -3549,8 +3719,9 @@ const App = {
       </div>` : ''}
 
       <div class="card" style="text-align:center;font-size:13px;color:var(--text-light)">
-        <div>我的生活台 v1.1（云端版）</div>
+        <div>我的生活台 v${BUILD_VERSION}（云端版）</div>
         <div style="margin-top:4px">${DB.mode === 'cloud' ? ('已同步到云端 · ' + (Auth.phone || '')) : '本地模式 · 数据仅存本设备'}</div>
+        ${DB.mode === 'cloud' ? '<div style="margin-top:6px;color:#e17055">⚠️ 免费数据库 90 天需续期，建议定期用「导出全部数据」备份</div>' : ''}
       </div>
 
       <div class="action-row">
@@ -3594,16 +3765,19 @@ const App = {
         const data = JSON.parse(text);
         if (!data.version) { App.toast('文件格式不对'); return; }
 
-        App.confirm('导入将覆盖现有数据，确定？', async () => {
-          await DB.clearAll();
-          for (const store of ['ledgers','transactions','habits','checkins','categories','notes','meta']) {
-            if (data[store]) {
+        App.confirm('导入将合并到现有数据：相同 ID 的条目被更新，云端独有的保留。确定？', async () => {
+          const stores = ['ledgers','transactions','habits','checkins','categories','notes','meta'];
+          for (const store of stores) {
+            if (data[store] && Array.isArray(data[store])) {
               for (const item of data[store]) {
                 await DB.put(store, item);
               }
             }
           }
-          App.toast('导入成功');
+          if (data.meta && !Array.isArray(data.meta)) {
+            for (const k in data.meta) await DB.put('meta', { key: k, value: data.meta[k] });
+          }
+          App.toast('导入成功（已合并到现有数据）');
           App.closeSheet();
           await Finance.init();
           await Home.render();
