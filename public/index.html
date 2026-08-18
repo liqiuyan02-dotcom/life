@@ -848,12 +848,16 @@ const DB = {
   DB_NAME: 'WorkbenchDB',
   DB_VERSION: 2,
   apiBase: (function () {
+    const isFile = (typeof location !== 'undefined' && location.protocol === 'file:');
+    // 通过 http(s) 打开（如 Render 同源部署）：始终走同源，忽略本地缓存的旧服务器地址，
+    // 否则旧地址（localhost:3001 / 旧 Render 实例）会让登录请求发错地方，导致“登录不上 / 数据对不上”
+    if (!isFile) return '';
+    // file:// 打开：沿用设置里保存的地址（默认本机服务）
     try {
       const saved = localStorage.getItem('wb_apibase');
       if (saved !== null && saved !== '') return saved;
     } catch (e) {}
-    // 默认：本地文件打开→连本机服务；通过 http(s) 打开（如 Render 同源部署）→ 走同源
-    return (typeof location !== 'undefined' && location.protocol === 'file:') ? 'http://localhost:3001' : '';
+    return 'http://localhost:3001';
   })(),
 
   setCloud(token) { this.mode = 'cloud'; this.token = token; },
@@ -3218,6 +3222,8 @@ const App = {
   async init() {
     const screen = document.getElementById('authScreen');
     const app = document.getElementById('app');
+    // 双保险：通过 http(s) 打开时强制同源，避免 localStorage 残留的旧服务器地址把登录/读写请求发错地方
+    if (!location.protocol.startsWith('file')) DB.apiBase = '';
     if (PERSONAL_MODE) {
       if (screen) screen.style.display = 'none';
       if (app) app.style.display = '';
