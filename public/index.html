@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#00b894">
-<title>我的工作台</title>
+<title>我的生活台</title>
 <style>
 /* ========== CSS 变量 ========== */
 :root {
@@ -302,7 +302,7 @@ input[type="number"] { -webkit-appearance: none; }
 .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
 .empty-state .text { font-size: 15px; }
 
-/* ========== 工作台首页 ========== */
+/* ========== 生活台首页 ========== */
 .home-date { font-size: 13px; color: var(--text-secondary); }
 .home-greeting { font-size: 24px; font-weight: 700; margin-top: 2px; }
 .home-account { font-size: 13px; color: var(--primary); margin-top: 4px; font-weight: 600; }
@@ -716,12 +716,12 @@ input[type="number"] { -webkit-appearance: none; }
   <!-- ===== 页面容器 ===== -->
   <div class="page-container" id="pageContainer">
 
-    <!-- ===== 工作台首页 ===== -->
+    <!-- ===== 生活台首页 ===== -->
     <div class="page active" id="page-home">
       <div class="page-header">
         <div>
           <div class="home-date" id="homeDate"></div>
-          <div class="home-greeting">我的工作台</div>
+          <div class="home-greeting">我的生活台</div>
           <div class="home-account" id="homeAccount"></div>
         </div>
         <div class="btn-icon" onclick="App.openSettings()">⚙️</div>
@@ -799,7 +799,7 @@ input[type="number"] { -webkit-appearance: none; }
   <!-- ===== 底部导航 ===== -->
   <div class="tab-bar">
     <div class="tab-item active" onclick="App.navigate('home')">
-      <div class="icon">🏠</div><div class="label">工作台</div>
+      <div class="icon">🏠</div><div class="label">生活台</div>
     </div>
     <div class="tab-item" onclick="App.navigate('finance')">
       <div class="icon">💰</div><div class="label">记账</div>
@@ -3027,7 +3027,7 @@ const Notes = {
 };
 
 /* ============================================================
- *  工作台首页
+ *  生活台首页
  * ============================================================ */
 const Home = {
   async render() {
@@ -3549,7 +3549,7 @@ const App = {
       </div>` : ''}
 
       <div class="card" style="text-align:center;font-size:13px;color:var(--text-light)">
-        <div>我的工作台 v1.1（云端版）</div>
+        <div>我的生活台 v1.1（云端版）</div>
         <div style="margin-top:4px">${DB.mode === 'cloud' ? ('已同步到云端 · ' + (Auth.phone || '')) : '本地模式 · 数据仅存本设备'}</div>
       </div>
 
@@ -3576,7 +3576,7 @@ const App = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `工作台备份_${Utils.todayStr()}.json`;
+    a.download = `生活台备份_${Utils.todayStr()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     App.toast('已导出');
@@ -3730,7 +3730,7 @@ App.init();
 </script>
 <!-- ===== 登录界面 ===== -->
 <div id="authScreen">
-  <div class="auth-title">我的工作台</div>
+  <div class="auth-title">我的生活台</div>
   <div class="auth-sub">登录账号后，手机 / 电脑可同步同一份数据</div>
   <div class="auth-card">
     <div class="auth-tabs">
