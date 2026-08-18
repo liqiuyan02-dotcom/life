@@ -254,6 +254,16 @@ app.get('/api/:store', authMiddleware, async (req, res) => {
     const val = req.query.value;
     items = items.filter(it => it[idx] === val || (Array.isArray(it[idx]) && it[idx].includes(val)));
   }
+  // 性能优化：列表接口剥离交易照片(base64 大字段)，仅保留 hasPhoto 标志；照片按需经 /api/:store/:id 单条拉取
+  if (store === 'transactions') {
+    items = items.map(t => {
+      if (t && t.photo) {
+        const { photo, ...rest } = t;
+        return { ...rest, hasPhoto: true };
+      }
+      return t;
+    });
+  }
   res.json(items);
 });
 
