@@ -3634,6 +3634,7 @@ const App = {
 
   // ===== 登录后若发现本机有历史数据，自动提示一次性迁移 =====
   async maybeAutoMigrate() {
+    if (PERSONAL_MODE) return; // 个人模式=单一固定云端账号，本地 IndexedDB 是无关残留，禁用自动覆盖以免破坏云端数据
     try {
       const local = await App.readLocalAll();
       const total = ['habits', 'checkins', 'transactions', 'notes', 'ledgers']
@@ -3657,6 +3658,7 @@ const App = {
       App.showLogin();
       return;
     }
+    if (PERSONAL_MODE) { App.toast('个人模式数据已实时存于云端，无需从本机迁移'); return; }
     const local = await App.readLocalAll();
     const n = (s) => (local[s] || []).length;
     const summary = `打卡项 ${n('habits')} · 打卡记录 ${n('checkins')} · 记账 ${n('transactions')} · 笔记 ${n('notes')} · 账本 ${n('ledgers')}`;
