@@ -87,6 +87,14 @@ async function saveDB(db) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
 
+// 简单内存互斥锁：串行化「读-改-写」操作，避免多标签页并发写导致数据覆盖/丢失（单进程有效）
+let _writeLock = Promise.resolve();
+function withLock(fn) {
+  const run = _writeLock.then(fn, fn);
+  _writeLock = run.then(() => {}, () => {});
+  return run;
+}
+
 function userBucket(db, uid) {
   if (!db.data[uid]) {
     db.data[uid] = {
@@ -179,30 +187,43 @@ async function seedDefaults(db, userUid) {
 
 // ---------- 认证路由 ----------
 app.post('/api/auth/register', async (req, res) => {
-  const { phone, password } = req.body || {};
-  if (!phone || !/^\d{6,20}$/.test(String(phone))) return res.status(400).json({ error: '请输入有效的手机号' });
-  if (!password || String(password).length < 4) return res.status(400).json({ error: '密码至少 4 位' });
-  const db = await loadDB();
-  if (db.users[phone]) return res.status(409).json({ error: '该手机号已注册，请直接登录' });
-  const { salt, hash } = hashPassword(password);
-  const id = uid();
-  db.users[phone] = { id, phone: String(phone), salt, passwordHash: hash };
-  userBucket(db, id); // 初始化空桶
-  await saveDB(db);
-  const token = signToken(id, String(phone));
-  res.json({ token, user: { id, phone: String(phone) } });
+  try {
+    const { phone, password } = req.body || {};
+    if (!phone || !/^\d{6,20}$/.test(String(phone))) return res.status(400).json({ error: '请输入有效的手机号' });
+    if (!password || String(password).length < 4) return res.status(400).json({ error: '密码至少 4 位' });
+    const result = await withLock(async () => {
+      const db = await loadDB();
+      if (db.users[phone]) return { conflict: true };
+      const { salt, hash } = hashPassword(password);
+      const id = uid();
+      db.users[phone] = { id, phone: String(phone), salt, passwordHash: hash };
+      userBucket(db, id); // 初始化空桶
+      await saveDB(db);
+      return { token: signToken(id, String(phone)), user: { id, phone: String(phone) } };
+    });
+    if (result && result.conflict) return res.status(409).json({ error: '该手机号已注册，请直接登录' });
+    res.json(result);
+  } catch (e) {
+    console.error('[register] error:', e.message);
+    res.status(500).json({ error: '服务器繁忙，请稍后重试', code: 'SERVER_ERR' });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { phone, password } = req.body || {};
-  const db = await loadDB();
-  const u = db.users[phone];
-  if (!u) return res.status(404).json({ error: '账号不存在，将自动创建', code: 'NO_ACCOUNT' });
-  if (!verifyPassword(String(password || ''), u.salt, u.passwordHash)) {
-    return res.status(401).json({ error: '密码错误', code: 'WRONG_PWD' });
+  try {
+    const { phone, password } = req.body || {};
+    const db = await loadDB();
+    const u = db.users[phone];
+    if (!u) return res.status(404).json({ error: '账号不存在，将自动创建', code: 'NO_ACCOUNT' });
+    if (!verifyPassword(String(password || ''), u.salt, u.passwordHash)) {
+      return res.status(401).json({ error: '密码错误', code: 'WRONG_PWD' });
+    }
+    const token = signToken(u.id, String(phone));
+    res.json({ token, user: { id: u.id, phone: String(phone) } });
+  } catch (e) {
+    console.error('[login] error:', e.message);
+    res.status(500).json({ error: '服务器繁忙，请稍后重试', code: 'SERVER_ERR' });
   }
-  const token = signToken(u.id, String(phone));
-  res.json({ token, user: { id: u.id, phone: String(phone) } });
 });
 
 app.get('/api/me', authMiddleware, (req, res) => {

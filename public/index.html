@@ -967,11 +967,27 @@ const DB = {
 
   _tx(store, mode) { return this.db.transaction(store, mode).objectStore(store); },
 
-  async _api(method, url, body) {
+  async _api(method, url, body, _retried) {
     const headers = { 'Content-Type': 'application/json' };
     if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
     const fullUrl = apiUrl(url);
-    const resp = await fetch(fullUrl, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    let resp;
+    try {
+      resp = await fetch(fullUrl, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctrl.signal });
+    } catch (e) {
+      clearTimeout(timer);
+      // 网络层错误（超时/连接被重置）：GET 幂等请求自动重试一次，缓解瞬时抖动与冷启动
+      if (!_retried && method === 'GET') return this._api(method, url, body, true);
+      throw new Error(e && e.name === 'AbortError' ? '网络超时，请重试' : '无法连接服务器');
+    }
+    clearTimeout(timer);
+    if (resp.status === 401) {
+      // 登录已过期/失效：清除会话并触发重新登录，而不是静默失败
+      if (typeof handleSessionExpired === 'function') handleSessionExpired();
+      throw new Error('登录已过期，正在重新登录…');
+    }
     if (!resp.ok) {
       let msg = '网络错误';
       try { const e = await resp.json(); msg = e.error || msg; } catch (e) {}
@@ -1079,6 +1095,15 @@ const DB = {
 /* ============================================================
  *  认证层 - 手机号 + 密码（云端账号）
  * ============================================================ */
+// 会话过期统一处理：任何 API 收到 401（token 过期/失效）时清除本地会话并触发重新登录
+function handleSessionExpired() {
+  try { Auth.clear(); } catch (e) {}
+  if (typeof App !== 'undefined' && App) {
+    if (PERSONAL_MODE) { App.autoLogin(); }
+    else { App.showLogin(); App.toast('登录已过期，请重新登录'); }
+  }
+}
+
 // 带超时的登录/注册请求：服务器不可达时快速给出明确提示，避免「点击没反应」
 async function authFetch(url, body) {
   const ctrl = new AbortController();
@@ -1106,9 +1131,15 @@ const Auth = {
   set(token, phone) { localStorage.setItem(this._tokenKey, token); localStorage.setItem(this._phoneKey, phone); },
   clear() { localStorage.removeItem(this._tokenKey); localStorage.removeItem(this._phoneKey); },
   async verify() {
-    const r = await fetch(apiUrl('/api/me'), { headers: { Authorization: 'Bearer ' + this.token } });
-    if (!r.ok) throw new Error('登录已过期，请重新登录');
-    return r.json();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch(apiUrl('/api/me'), { headers: { Authorization: 'Bearer ' + this.token }, signal: ctrl.signal });
+      if (!r.ok) throw new Error('登录已过期，请重新登录');
+      return r.json();
+    } finally {
+      clearTimeout(timer);
+    }
   },
   async register(phone, password) {
     return authFetch('/api/auth/register', { phone, password });
@@ -3385,6 +3416,14 @@ const App = {
 
   // 个人模式：用内置账号自动登录（账号不存在则自动注册），失败则退回本地模式
   async autoLogin() {
+    // 并发去重：多标签页/重复调用共享同一次登录，避免并发 register/login 造成会话冲突
+    if (this._autoLoginPromise) return this._autoLoginPromise;
+    this._autoLoginPromise = this._doAutoLogin();
+    try { return await this._autoLoginPromise; }
+    finally { this._autoLoginPromise = null; }
+  },
+
+  async _doAutoLogin() {
     const phone = PERSONAL_PHONE, pwd = PERSONAL_PWD;
     const maxRetry = 4;
     for (let attempt = 1; attempt <= maxRetry; attempt++) {
@@ -3395,7 +3434,12 @@ const App = {
           r = await Auth.login(phone, pwd);
         } catch (le) {
           if (le && le.code === 'NO_ACCOUNT') {
-            await Auth.register(phone, pwd);
+            try {
+              await Auth.register(phone, pwd);
+            } catch (re) {
+              // 并发下可能已被另一标签页注册（409）→ 忽略并转登录
+              if (!(re && re.status === 409)) throw re;
+            }
             r = await Auth.login(phone, pwd);
           } else {
             throw le;
