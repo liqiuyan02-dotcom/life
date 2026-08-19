@@ -2735,58 +2735,55 @@ const Habits = {
     if (data.length === 0) return '<div style="text-align:center;color:var(--text-light);padding:20px">暂无数据</div>';
 
     const width = Math.max(data.length * 40, 300);
-    const height = 160;
-    const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+    const height = 190;
+    const padding = { top: 26, right: 16, bottom: 30, left: 40 };
     const chartW = width - padding.left - padding.right;
     const chartH = height - padding.top - padding.bottom;
 
     const maxVal = Math.max(...data.map(d => d.value), habit.target || 0, 1);
     const minVal = 0;
 
-    const points = data.map((d, i) => {
-      const x = padding.left + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
-      const y = padding.top + chartH - ((d.value - minVal) / (maxVal - minVal)) * chartH;
-      return { x, y, ...d };
-    });
+    const barW = Math.min(26, Math.max(8, (chartW / data.length) * 0.6));
 
-    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-    const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${padding.top + chartH} L ${points[0].x.toFixed(1)} ${padding.top + chartH} Z`;
-
-    // Y轴刻度
+    let svg = `<svg class="chart-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+    // 网格线 + Y 轴刻度
     const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => {
       const val = minVal + (maxVal - minVal) * t;
       const y = padding.top + chartH - t * chartH;
       return { val, y };
     });
-
-    let svg = `<svg class="chart-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
-    // 网格线
     for (const t of yTicks) {
       svg += `<line x1="${padding.left}" y1="${t.y}" x2="${width - padding.right}" y2="${t.y}" stroke="#f0f2f5" stroke-width="1"/>`;
-      svg += `<text x="${padding.left - 5}" y="${t.y + 4}" text-anchor="end" font-size="10" fill="#b2bec3">${t.val.toFixed(1)}</text>`;
+      svg += `<text x="${padding.left - 5}" y="${t.y + 4}" text-anchor="end" font-size="10" fill="#b2bec3">${Number.isInteger(t.val) ? t.val : t.val.toFixed(1)}</text>`;
     }
     // 目标线
     if (habit.target) {
       const ty = padding.top + chartH - ((habit.target - minVal) / (maxVal - minVal)) * chartH;
       svg += `<line x1="${padding.left}" y1="${ty}" x2="${width - padding.right}" y2="${ty}" stroke="#fdcb6e" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${width - padding.right}" y="${ty - 4}" text-anchor="end" font-size="10" fill="#fdcb6e">目标 ${habit.target}</text>`;
+      svg += `<text x="${width - padding.right}" y="${ty - 4}" text-anchor="end" font-size="10" fill="#e17055">目标 ${habit.target}</text>`;
     }
-    // 区域
-    svg += `<path d="${areaD}" fill="rgba(0,184,148,0.1)"/>`;
-    // 折线
-    svg += `<path d="${pathD}" fill="none" stroke="#00b894" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    // 数据点
-    for (const p of points) {
-      svg += `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#00b894" stroke="#fff" stroke-width="1.5"/>`;
-    }
-    // X轴标签（只显示部分）
+    // 柱状图：每天一根柱子，高度=数值，柱顶标数值，达标橙色/未达标绿色/0 灰色
     const labelStep = Math.ceil(data.length / 6);
-    for (let i = 0; i < data.length; i += labelStep) {
-      const p = points[i];
-      const d = new Date(data[i].date);
-      const label = `${d.getMonth()+1}/${d.getDate()}`;
-      svg += `<text x="${p.x}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#b2bec3">${label}</text>`;
-    }
+    data.forEach((d, i) => {
+      const cx = padding.left + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
+      const h = Math.max(0, ((d.value - minVal) / (maxVal - minVal)) * chartH);
+      const x = cx - barW / 2;
+      const y = padding.top + chartH - h;
+      const over = habit.target && d.value >= habit.target;
+      const color = d.value > 0 ? (over ? '#e17055' : '#00b894') : '#dfe6e9';
+      svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${color}"/>`;
+      // 柱顶数值
+      if (d.value > 0) {
+        const vLabel = Math.round(d.value * 10) / 10;
+        svg += `<text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" font-size="9" fill="#636e72">${vLabel}</text>`;
+      }
+      // X 轴日期（部分显示）
+      if (i % labelStep === 0 || i === data.length - 1) {
+        const dt = new Date(d.date);
+        const label = `${dt.getMonth() + 1}/${dt.getDate()}`;
+        svg += `<text x="${cx.toFixed(1)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#b2bec3">${label}</text>`;
+      }
+    });
     svg += `</svg>`;
     return svg;
   },
