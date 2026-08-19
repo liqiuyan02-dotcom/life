@@ -20,7 +20,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3001;
 const SECRET = process.env.SECRET || 'workbench-dev-secret-change-me';
 const USE_PG = !!process.env.DATABASE_URL;
-const BUILD_VERSION = '1.2.0';
+const BUILD_VERSION = '1.3.0';
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 
 // ---------- PostgreSQL 连接（可选）----------
@@ -228,6 +228,44 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/me', authMiddleware, (req, res) => {
   res.json({ user: { id: req.uid, phone: req.phone } });
+});
+
+// ---------- 个人信息（昵称 / 头像）绑定到账号，云端持久化 ----------
+function userById(db, id) {
+  for (const phone in db.users) {
+    if (db.users[phone] && db.users[phone].id === id) return db.users[phone];
+  }
+  return null;
+}
+app.get('/api/auth/profile', authMiddleware, async (req, res) => {
+  try {
+    const db = await loadDB();
+    const u = userById(db, req.uid);
+    if (!u) return res.status(404).json({ error: '账号不存在' });
+    res.json({ nickname: u.nickname || '', avatar: u.avatar || '' });
+  } catch (e) {
+    console.error('[profile:get] error:', e.message);
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+app.put('/api/auth/profile', authMiddleware, async (req, res) => {
+  try {
+    const { nickname, avatar } = req.body || {};
+    const result = await withLock(async () => {
+      const db = await loadDB();
+      const u = userById(db, req.uid);
+      if (!u) return { notfound: true };
+      if (typeof nickname === 'string') u.nickname = nickname.trim().slice(0, 20);
+      if (typeof avatar === 'string') u.avatar = avatar.slice(0, 8);
+      await saveDB(db);
+      return { ok: true, nickname: u.nickname, avatar: u.avatar };
+    });
+    if (result.notfound) return res.status(404).json({ error: '账号不存在' });
+    res.json(result);
+  } catch (e) {
+    console.error('[profile:put] error:', e.message);
+    res.status(500).json({ error: '服务器错误' });
+  }
 });
 
 // ---------- 健康检查（公开，必须放在通用 /api/:store 之前）----------
