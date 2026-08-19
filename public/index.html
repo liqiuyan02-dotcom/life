@@ -910,12 +910,12 @@ const DB = {
     // 通过 http(s) 打开（如 Render 同源部署）：始终走同源，忽略本地缓存的旧服务器地址，
     // 否则旧地址（localhost:3001 / 旧 Render 实例）会让登录请求发错地方，导致“登录不上 / 数据对不上”
     if (!isFile) return '';
-    // file:// 打开：沿用设置里保存的地址（默认本机服务）
+    // file:// 打开：默认指向已部署的云端账号系统（同一份数据可在任意设备同步）
     try {
       const saved = localStorage.getItem('wb_apibase');
       if (saved !== null && saved !== '') return saved;
     } catch (e) {}
-    return 'http://localhost:3001';
+    return 'https://workbench-server-bpps.onrender.com';
   })(),
 
   setCloud(token) { this.mode = 'cloud'; this.token = token; },
@@ -3889,9 +3889,9 @@ const App = {
       <div class="card">
         <div class="setting-item" style="display:block">
           <div class="si-label" style="margin-bottom:8px">☁️ 云端服务器地址</div>
-          <input id="apiBaseInput" value="${DB.apiBase || 'http://localhost:3001'}" placeholder="http://localhost:3001 或 Render 网址" onchange="App.setApiBase(this.value)"
+          <input id="apiBaseInput" value="${DB.apiBase || 'https://workbench-server-bpps.onrender.com'}" placeholder="云端网址，如 https://workbench-server-bpps.onrender.com" onchange="App.setApiBase(this.value)"
             style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fafafa">
-          <div style="font-size:11px;color:var(--text-light);margin-top:5px">本机运行服务填 http://localhost:3001；部署到 Render 后填对应网址</div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:5px">默认已指向云端账号系统。若提示连不上，多为本机网络无法访问该域名（DNS），可改用手机流量，或在能联网的设备上访问同一网址。</div>
         </div>
       </div>
 
@@ -4140,6 +4140,7 @@ App.init();
 <div id="authScreen">
   <div class="auth-title">我的生活台</div>
   <div class="auth-sub">登录账号后，手机 / 电脑可同步同一份数据</div>
+  <div class="auth-sub" style="font-size:12px;margin-top:6px;opacity:.85">云端地址：https://workbench-server-bpps.onrender.com</div>
   <div class="auth-card">
     <div class="auth-tabs">
       <div class="auth-tab active" id="authTabLogin" onclick="App.switchAuthTab('login')">登录</div>
