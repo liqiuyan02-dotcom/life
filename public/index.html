@@ -2445,17 +2445,28 @@ const Habits = {
     return streak;
   },
 
+  // 默认一键打卡：不弹表单、不填数值/备注，直接记录一次
   async quickCheckin(habitId) {
     const habit = await DB.get('habits', habitId);
     if (!habit) return;
+    const checkin = {
+      id: Utils.uid(),
+      habitId,
+      value: null,
+      note: '',
+      timestamp: new Date().toISOString()
+    };
+    await DB.add('checkins', checkin);
+    App.toast('打卡成功！');
+    this.render();
+    Home.render();
+  },
 
-    if (habit.recordType === 'text' || habit.recordType === 'both') {
-      // 需要弹出表单
-      this._showCheckinForm(habit);
-    } else {
-      // 纯数值或无数据，也弹表单
-      this._showCheckinForm(habit);
-    }
+  // 详细打卡：弹出表单补充数值/备注（点开详情页的「详细打卡」进入）
+  async detailedCheckin(habitId) {
+    const habit = await DB.get('habits', habitId);
+    if (!habit) return;
+    this._showCheckinForm(habit);
   },
 
   _showCheckinForm(habit) {
@@ -2599,6 +2610,9 @@ const Habits = {
       <div class="action-row">
         <button class="btn btn-secondary" onclick="Habits.showEditHabit('${habit.id}')">编辑</button>
         <button class="btn btn-secondary" onclick="Habits.showBulkCheckin('${habit.id}')">批量补卡</button>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="Habits.detailedCheckin('${habit.id}')">详细打卡</button>
         <button class="btn btn-primary" onclick="App.closeSheet();setTimeout(()=>Habits.quickCheckin('${habit.id}'),300)">打卡</button>
       </div>
     `;
