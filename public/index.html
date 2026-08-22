@@ -788,6 +788,7 @@ input[type="number"] { -webkit-appearance: none; }
 }
 .auth-btn:active { opacity: .85; }
 .auth-hint { margin-top: 14px; font-size: 12px; color: var(--text-light); text-align: center; line-height: 1.5; }
+.auth-error { margin-top: 10px; font-size: 13px; color: #e74c3c; text-align: center; line-height: 1.5; min-height: 20px; }
 .auth-local {
   margin-top: 16px; width: 100%; max-width: 360px; text-align: center;
   color: #fff; font-size: 13px; text-decoration: underline; cursor: pointer; opacity: .92;
@@ -1135,7 +1136,7 @@ function handleSessionExpired() {
 // 带超时的登录/注册请求：服务器不可达时快速给出明确提示，避免「点击没反应」
 async function authFetch(url, body) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10000);
+  const timer = setTimeout(() => ctrl.abort(), 20000);
   try {
     const r = await fetch(apiUrl(url), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3525,7 +3526,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.3';
+const BUILD_VERSION = '1.3.4';
 
 const App = {
   currentPage: 'home',
@@ -3651,22 +3652,33 @@ const App = {
     const tR = document.getElementById('authTabRegister');
     const hint = document.getElementById('authHint');
     const btn = document.querySelector('#authScreen .auth-btn');
+    const errEl = document.getElementById('authError');
     if (tL) tL.classList.toggle('active', mode === 'login');
     if (tR) tR.classList.toggle('active', mode === 'register');
     if (hint) hint.textContent = mode === 'register'
       ? '注册后自动登录，数据仅属于该手机号'
       : '没有账号？切到「注册」先用手机号注册一个';
     if (btn) btn.textContent = mode === 'register' ? '注册并登录' : '登录';
+    if (errEl) errEl.textContent = '';
   },
 
   async doAuth() {
     const phoneEl = document.getElementById('authPhone');
     const pwdEl = document.getElementById('authPwd');
     const btn = document.querySelector('#authScreen .auth-btn');
-    const phone = phoneEl ? phoneEl.value.trim() : '';
+    const errEl = document.getElementById('authError');
+    const phone = (phoneEl ? phoneEl.value : '').replace(/\D/g, '');
     const pwd = pwdEl ? pwdEl.value : '';
-    if (!/^\d{6,20}$/.test(phone)) { this.toast('请输入有效手机号'); return; }
-    if (!pwd || pwd.length < 4) { this.toast('密码至少 4 位'); return; }
+    if (phoneEl) phoneEl.value = phone;
+    let err = '';
+    if (!/^\d{6,20}$/.test(phone)) err = '请输入 6-20 位数字手机号';
+    else if (!pwd || pwd.length < 4) err = '密码至少 4 位';
+    if (err) {
+      if (errEl) errEl.textContent = err;
+      this.toast(err);
+      return;
+    }
+    if (errEl) errEl.textContent = '';
     if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
     try {
       let r, autoRegistered = false;
@@ -3695,8 +3707,9 @@ const App = {
     } catch (e) {
       let msg = e.message || '操作失败，请确认服务端地址已填写且服务已启动';
       if (e.name === 'AbortError' || /超时|无法连接|连接服务器|SERVER_ERR/.test(msg)) {
-        msg += '（多为网络/DNS 无法访问云端，可改用手机流量，或在设置里填写可访问的服务器地址）';
+        msg += '。建议刷新页面再试一次（Render 冷启动约 20 秒）';
       }
+      if (errEl) errEl.textContent = msg;
       this.toast(msg);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = this._authMode === 'register' ? '注册并登录' : '登录'; }
@@ -4262,6 +4275,7 @@ App.init();
     <input class="auth-input" id="authPhone" type="tel" inputmode="numeric" placeholder="手机号">
     <input class="auth-input" id="authPwd" type="password" placeholder="密码（至少 4 位）">
     <button class="auth-btn" onclick="App.doAuth()">登录</button>
+    <div class="auth-error" id="authError"></div>
     <div class="auth-hint" id="authHint">没有账号？切到「注册」先用手机号注册一个即可</div>
   </div>
   <div class="auth-local" onclick="App.useLocalMode()">仅本机使用（不同步云端）</div>
