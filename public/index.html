@@ -490,10 +490,6 @@ input[type="number"] { -webkit-appearance: none; }
 .habit-card .hc-del { font-size: 16px; opacity: 0.4; cursor: pointer; padding: 4px; transition: opacity 0.2s; }
 .habit-card .hc-del:hover { opacity: 1; }
 
-/* ========== 打卡趋势图 ========== */
-.chart-container { width: 100%; overflow-x: auto; padding: 8px 0; }
-.chart-svg { display: block; }
-
 /* ========== 记事 ========== */
 .note-card {
   background: var(--card-bg);
@@ -2745,13 +2741,6 @@ const Habits = {
       </div>
     `;
 
-    // 趋势图
-    if ((habit.recordType === 'number' || habit.recordType === 'both') && checkins.length > 0) {
-      const recent = checkins.slice(0, 30).reverse();
-      const svg = this._renderChart(recent, habit);
-      html += `<div class="card"><div class="card-title">📈 趋势</div><div class="chart-container">${svg}</div></div>`;
-    }
-
     // 历史记录
     if (checkins.length > 0) {
       html += `<div class="card"><div class="card-title">📋 打卡历史</div>`;
@@ -2897,64 +2886,6 @@ const Habits = {
     this.render();
     Home.render();
     this.showDetail(habitId);
-  },
-
-  _renderChart(checkins, habit) {
-    const data = checkins.map(c => ({ value: c.value || 0, date: c.timestamp.slice(0, 10) }));
-    if (data.length === 0) return '<div style="text-align:center;color:var(--text-light);padding:20px">暂无数据</div>';
-
-    const width = Math.max(data.length * 40, 300);
-    const height = 190;
-    const padding = { top: 26, right: 16, bottom: 30, left: 40 };
-    const chartW = width - padding.left - padding.right;
-    const chartH = height - padding.top - padding.bottom;
-
-    const maxVal = Math.max(...data.map(d => d.value), habit.target || 0, 1);
-    const minVal = 0;
-
-    const barW = Math.min(26, Math.max(8, (chartW / data.length) * 0.6));
-
-    let svg = `<svg class="chart-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
-    // 网格线 + Y 轴刻度
-    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => {
-      const val = minVal + (maxVal - minVal) * t;
-      const y = padding.top + chartH - t * chartH;
-      return { val, y };
-    });
-    for (const t of yTicks) {
-      svg += `<line x1="${padding.left}" y1="${t.y}" x2="${width - padding.right}" y2="${t.y}" stroke="#f0f2f5" stroke-width="1"/>`;
-      svg += `<text x="${padding.left - 5}" y="${t.y + 4}" text-anchor="end" font-size="10" fill="#b2bec3">${Number.isInteger(t.val) ? t.val : t.val.toFixed(1)}</text>`;
-    }
-    // 目标线
-    if (habit.target) {
-      const ty = padding.top + chartH - ((habit.target - minVal) / (maxVal - minVal)) * chartH;
-      svg += `<line x1="${padding.left}" y1="${ty}" x2="${width - padding.right}" y2="${ty}" stroke="#fdcb6e" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${width - padding.right}" y="${ty - 4}" text-anchor="end" font-size="10" fill="#e17055">目标 ${habit.target}</text>`;
-    }
-    // 柱状图：每天一根柱子，高度=数值，柱顶标数值，达标橙色/未达标绿色/0 灰色
-    const labelStep = Math.ceil(data.length / 6);
-    data.forEach((d, i) => {
-      const cx = padding.left + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
-      const h = Math.max(0, ((d.value - minVal) / (maxVal - minVal)) * chartH);
-      const x = cx - barW / 2;
-      const y = padding.top + chartH - h;
-      const over = habit.target && d.value >= habit.target;
-      const color = d.value > 0 ? (over ? '#e17055' : '#00b894') : '#dfe6e9';
-      svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${color}"/>`;
-      // 柱顶数值
-      if (d.value > 0) {
-        const vLabel = Math.round(d.value * 10) / 10;
-        svg += `<text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" font-size="9" fill="#636e72">${vLabel}</text>`;
-      }
-      // X 轴日期（部分显示）
-      if (i % labelStep === 0 || i === data.length - 1) {
-        const dt = new Date(d.date);
-        const label = `${dt.getMonth() + 1}/${dt.getDate()}`;
-        svg += `<text x="${cx.toFixed(1)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#b2bec3">${label}</text>`;
-      }
-    });
-    svg += `</svg>`;
-    return svg;
   },
 
   showAddHabit() {
@@ -3576,7 +3507,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.8';
+const BUILD_VERSION = '1.3.9';
 
 const App = {
   currentPage: 'home',
