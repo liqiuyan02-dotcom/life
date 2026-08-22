@@ -3344,12 +3344,13 @@ const Home = {
         : '📱 本地模式（未登录）';
     }
 
-    // 统计卡片
-    const ledger = await Finance.getCurrentLedger();
-    const txs = ledger ? await DB.getByIndex('transactions', 'ledgerId', ledger.id) : [];
+    // 统计卡片：聚合「全部账本」的本月支出（按本地年月判断，规避 toISOString 时区偏移导致的跨月误差）
+    const txs = await DB.getAll('transactions');
     const now2 = new Date();
-    const monthStart = new Date(now2.getFullYear(), now2.getMonth(), 1).toISOString();
-    const monthTx = txs.filter(t => t.date >= monthStart);
+    const monthKey = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}`;
+    const localYM = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+    const isExpense = (t) => !t.type || t.type !== 'income';
+    const monthTx = txs.filter(t => localYM(t.date) === monthKey && isExpense(t));
     const monthTotal = monthTx.reduce((s, t) => s + Utils.txAmt(t), 0);
 
     const habits = await DB.getAll('habits');
@@ -3369,7 +3370,7 @@ const Home = {
       <div class="stat-card">
         <div class="stat-label">本月支出</div>
         <div class="stat-value">${Utils.formatMoney(monthTotal)}</div>
-        <div class="stat-sub">${ledger ? Utils.escape(ledger.name) : '无账本'} · ${monthTx.length}笔</div>
+        <div class="stat-sub">全部账本 · ${monthTx.length}笔</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">今日打卡</div>
@@ -3389,10 +3390,11 @@ const Home = {
       (checkinByDay[c.day] = checkinByDay[c.day] || []).push(c.icon);
     }
     const spendByDay = {};
+    const localDay = (iso) => { const d = new Date(iso); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
     for (const t of txs) {
       const amt = Utils.txAmt(t);
       if (amt > 0) {
-        const day = t.date.slice(0, 10);
+        const day = localDay(t.date);
         spendByDay[day] = (spendByDay[day] || 0) + amt;
       }
     }
@@ -3526,7 +3528,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.4';
+const BUILD_VERSION = '1.3.5';
 
 const App = {
   currentPage: 'home',
