@@ -1189,7 +1189,26 @@ const Auth = {
     } finally { clearTimeout(timer); }
   },
   async saveProfile(p) {
-    return authFetch('/api/auth/profile', p);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const r = await fetch(apiUrl('/api/auth/profile'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token },
+        body: JSON.stringify(p),
+        signal: ctrl.signal
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        const err = new Error(e.error || '保存失败');
+        err.status = r.status;
+        throw err;
+      }
+      return r.json();
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('连接服务器超时');
+      throw e;
+    } finally { clearTimeout(timer); }
   }
 };
 
@@ -3507,7 +3526,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.9';
+const BUILD_VERSION = '1.4.0';
 
 const App = {
   currentPage: 'home',
