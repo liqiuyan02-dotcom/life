@@ -3399,15 +3399,24 @@ const Home = {
     this._calSpendMap = spendByDay;
     this._renderCalendar();
 
-    // 最近记账
+    // 最近记账：聚合所有账本，每条右上角标注所属账本（与总账单本视觉统一）
+    const homeLedgers = await DB.getAll('ledgers');
+    const homeLedgerMap = {};
+    homeLedgers.forEach(l => homeLedgerMap[l.id] = l);
+    const homeTx = (await DB.getAll('transactions'))
+      .slice()
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 3);
     const financeEl = document.getElementById('homeFinance');
-    if (txs.length === 0) {
+    if (homeTx.length === 0) {
       financeEl.innerHTML = `<div style="text-align:center;color:var(--text-light);padding:12px">暂无记录</div>`;
     } else {
-      const recent = txs.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3);
-      financeEl.innerHTML = recent.map(tx => {
+      financeEl.innerHTML = homeTx.map(tx => {
+        const hl = homeLedgerMap[tx.ledgerId];
+        const ledgerName = hl ? hl.name : '未命名账本';
+        const ledgerColor = hl ? Finance.ledgerColors[hl.color || 0] : '#636e72';
         const cat = Finance.txCategories[tx.categoryIdx] || Finance.txCategories[7];
-        const payer = ledger.members[tx.payerIdx] || '?';
+        const payer = hl ? (hl.members[tx.payerIdx] || '?') : '?';
         const amtHtml = tx.amountUnknown ? `<span style="color:var(--warning)">未知</span>` : Utils.formatMoney(tx.amount);
         return `
           <div class="list-item">
@@ -3418,6 +3427,7 @@ const Home = {
             </div>
             <div class="list-item-right">
               <div class="list-item-amount">${amtHtml}</div>
+              <div class="ledger-badge" style="background:${ledgerColor}22;color:${ledgerColor}">📒 ${Utils.escape(ledgerName)}</div>
             </div>
           </div>
         `;
@@ -3515,7 +3525,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.2';
+const BUILD_VERSION = '1.3.3';
 
 const App = {
   currentPage: 'home',

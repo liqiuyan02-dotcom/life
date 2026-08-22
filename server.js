@@ -20,7 +20,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3001;
 const SECRET = process.env.SECRET || 'workbench-dev-secret-change-me';
 const USE_PG = !!process.env.DATABASE_URL;
-const BUILD_VERSION = '1.3.2';
+const BUILD_VERSION = '1.3.3';
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 
 // ---------- PostgreSQL 连接（可选）----------
