@@ -3530,7 +3530,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.6';
+const BUILD_VERSION = '1.3.7';
 
 const App = {
   currentPage: 'home',
@@ -3891,6 +3891,14 @@ const App = {
           if (e && e.name === 'AbortError') { this.toast('已取消'); return; }
         }
       }
+      // 微信内置浏览器：下载会被拦截，改为复制文本兜底
+      const ua1 = (typeof navigator !== 'undefined' && navigator.userAgent || '').toLowerCase();
+      if (/micromessenger/i.test(ua1)) {
+        const combined = '===== 账目 ' + f1 + ' =====\n' + txCsv + '\n\n===== 打卡 ' + f2 + ' =====\n' + chCsv;
+        App.showCopyModal('生活台数据.csv', combined);
+        this.toast('已生成可复制文本，点「复制全部」存出来');
+        return;
+      }
       this._downloadFile(f1, txCsv, 'text/csv;charset=utf-8');
       this._downloadFile(f2, chCsv, 'text/csv;charset=utf-8');
       this.toast('已导出账目与打卡 Excel 表（CSV）');
@@ -4115,12 +4123,57 @@ const App = {
         // 分享失败，继续走下载兜底
       }
     }
-    // 回退：浏览器下载
+    // 微信内置浏览器：下载会被拦截，改为显示文本供复制
+    const ua0 = (typeof navigator !== 'undefined' && navigator.userAgent || '').toLowerCase();
+    if (/micromessenger/i.test(ua0)) {
+      let content = (typeof opts.text === 'string') ? opts.text : null;
+      if (content == null) { try { content = await blob.text(); } catch (e) { content = ''; } }
+      App.showCopyModal(filename, content);
+      return 'copy';
+    }
+    // 其他：浏览器下载
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     return 'downloaded';
+  },
+
+  // 微信等不支持分享/下载的环境：弹窗显示全部内容，可一键复制或长按复制
+  showCopyModal(filename, content) {
+    const html = `
+      <div id="copyOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
+        <div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:14px 16px;border-bottom:1px solid #eee">
+            <div style="font-size:15px;font-weight:600">导出内容已生成</div>
+            <div style="font-size:12px;color:#888;margin-top:4px">当前为微信内置浏览器，无法存文件。请「复制全部」后粘贴到「文件传输助手」/ 邮件保存；或在右上角 ··· 用 Safari/Chrome 打开本页后再导出为文件。</div>
+          </div>
+          <textarea id="copyText" readonly style="flex:1;min-height:240px;margin:0;border:0;padding:12px;font-family:monospace;font-size:11px;line-height:1.5;resize:none;box-sizing:border-box;word-break:break-all;background:#fafafa"></textarea>
+          <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid #eee">
+            <button class="btn btn-primary" style="flex:1" onclick="App.copyExportText()">复制全部</button>
+            <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('copyOverlay').remove()">关闭</button>
+          </div>
+        </div>
+      </div>`;
+    const old = document.getElementById('copyOverlay'); if (old) old.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+    const ta = document.getElementById('copyText'); if (ta) ta.value = (content == null ? '' : String(content));
+  },
+
+  async copyExportText() {
+    const ta = document.getElementById('copyText');
+    if (!ta) return;
+    const text = ta.value;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        App.toast('已复制，去粘贴到文件传输助手/邮件保存');
+        return;
+      }
+    } catch (e) {}
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); App.toast('已复制，去粘贴到文件传输助手/邮件保存'); }
+    catch (e) { App.toast('请长按文本框手动全选复制'); }
   },
 
   async exportData() {
@@ -4155,11 +4208,13 @@ const App = {
         meta: await DB.getAll('meta'),
       };
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
     const filename = `生活台备份_${Utils.todayStr()}.json`;
-    const res = await App.shareOrDownload(blob, filename, { title: '生活台数据备份', text: '我的生活台全量备份' });
+    const res = await App.shareOrDownload(blob, filename, { title: '生活台数据备份', text: jsonStr });
     if (res === 'shared') App.toast('已调起系统分享，可存到「文件」或发微信');
     else if (res === 'cancelled') App.toast('已取消');
+    else if (res === 'copy') App.toast('已生成可复制文本，点「复制全部」存出来');
     else App.toast('已导出（浏览器下载）');
   },
 
