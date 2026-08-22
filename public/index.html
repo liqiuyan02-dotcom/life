@@ -1287,6 +1287,10 @@ const Finance = {
   currentTab: 'list',
   filterCat: -1,            // -1 = 全部分类
   filterSettle: 'all',      // all | settled | unsettled
+  pageSize: 60,             // 列表分页：每页渲染条数，避免总账本一次渲染过多节点导致卡顿
+  _listLimit: null,         // 当前已渲染到的条数（加载更多时累加）
+  _txCache: null,           // 交易基础数据缓存（按账本），避免每次重拉云端
+  _txDirty: false,          // 数据变更后置 true，下次渲染重新拉取
   _formLedgerId: null,      // 记账表单当前所属账本
   ledgerColors: ['#00b894','#0984e3','#6c5ce7','#e17055','#fd79a8','#00cec9','#fdcb6e'],
   txCategories: [
@@ -1342,6 +1346,7 @@ const Finance = {
 
   async selectLedger(id) {
     this.currentLedgerId = id;
+    this._listLimit = this.pageSize;
     await DB.setMeta('currentLedgerId', id);
     this.render();
   },
@@ -1373,22 +1378,37 @@ const Finance = {
     const ledgerMap = {};
     ledgers.forEach(l => ledgerMap[l.id] = l);
 
-    let txs;
-    if (allMode) {
-      txs = await DB.getAll('transactions');
+    // 取基础数据：按账本缓存，数据未变更时直接用缓存，避免每次从云端重拉全部交易
+    const cacheKey = allMode ? '__ALL__' : this.currentLedgerId;
+    let baseTxs;
+    if (this._txCache && this._txCache.key === cacheKey && !this._txDirty) {
+      baseTxs = this._txCache.txs;
     } else {
-      const ledger = await this.getCurrentLedger();
-      if (!ledger) return;
-      txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+      if (allMode) baseTxs = await DB.getAll('transactions');
+      else {
+        const ledger = await this.getCurrentLedger();
+        if (!ledger) return;
+        baseTxs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+      }
+      this._txCache = { key: cacheKey, txs: baseTxs };
+      this._txDirty = false;
     }
 
     // 筛选：分类
+    let txs = baseTxs;
     if (this.filterCat >= 0) txs = txs.filter(t => (t.categoryIdx || 0) === this.filterCat);
     // 筛选：清算状态
     if (this.filterSettle === 'settled') txs = txs.filter(t => t.settlementId);
     else if (this.filterSettle === 'unsettled') txs = txs.filter(t => !t.settlementId);
 
     txs.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // 每日小计：单次 O(n) 统计（原实现在循环内反复 filter 整张表，记录多时呈 O(n^2) 卡顿）
+    const dayTotals = new Map();
+    for (const t of txs) {
+      const d = t.date.slice(0, 10);
+      dayTotals.set(d, (dayTotals.get(d) || 0) + Utils.txAmt(t));
+    }
 
     const el = document.getElementById('financeContent');
 
@@ -1411,13 +1431,18 @@ const Finance = {
       return;
     }
 
+    // 分页：仅渲染前 _listLimit 条，剩余通过「加载更多」追加，避免一次性创建过多 DOM 节点
+    if (this._listLimit == null) this._listLimit = this.pageSize;
+    const limit = this._listLimit;
+    const visible = txs.slice(0, limit);
+    const hasMore = txs.length > limit;
+
     let html = filterBar;
     let lastDate = '';
-    for (const tx of txs) {
+    for (const tx of visible) {
       const txDate = tx.date.slice(0, 10);
       if (txDate !== lastDate) {
-        const dayTx = txs.filter(t => t.date.slice(0, 10) === txDate);
-        const dayTotal = dayTx.reduce((s, t) => s + Utils.txAmt(t), 0);
+        const dayTotal = dayTotals.get(txDate) || 0;
         html += `<div style="padding:12px 4px 4px;font-size:13px;color:var(--text-secondary);font-weight:600;display:flex;justify-content:space-between">
           <span>${Utils.formatDate(txDate)}</span><span>共 ${Utils.formatMoney(dayTotal)}</span></div>`;
         lastDate = txDate;
@@ -1457,13 +1482,28 @@ const Finance = {
           </div>
         </div>`;
     }
+    if (hasMore) {
+      html += `<div class="load-more" onclick="Finance.loadMore()">加载更多（还剩 ${txs.length - limit} 条）</div>`;
+    }
     el.innerHTML = html;
+  },
+
+  // 列表分页：追加渲染下一页
+  loadMore() {
+    this._listLimit = (this._listLimit || this.pageSize) + this.pageSize;
+    this.renderList();
+  },
+
+  // 数据已变更：标记 dirty，下次渲染重新拉取云端最新数据
+  markTxDirty() {
+    this._txDirty = true;
   },
 
   // 列表筛选：分类 / 清算状态
   setFilter(type, val) {
     if (type === 'cat') this.filterCat = val;
     else if (type === 'settle') this.filterSettle = val;
+    this._listLimit = this.pageSize; // 切换筛选后从第一页重新展示
     this.renderList();
   },
 
@@ -1477,6 +1517,7 @@ const Finance = {
     tx.amountUnknown = false;
     tx.amount = v;
     await DB.put('transactions', tx);
+    this._txDirty = true;
     App.toast('已补全金额 ' + Utils.formatMoney(v));
     this.renderList();
   },
@@ -1696,6 +1737,7 @@ const Finance = {
       id: sid, ledgerId: st.ledger.id, date: new Date().toISOString(),
       txIds: ids, transfers, total
     });
+    this._txDirty = true;
     App.toast(`已清算 ${ids.length} 笔账目`);
     this.renderStats();
     Home.render();
@@ -1720,6 +1762,7 @@ const Finance = {
     App.confirm('取消清算后，这批账目会恢复为「未清算」并重新计入统计，确定？', async () => {
       await this._revertSettlementById(st.ledger, sid);
       App.toast('已取消清算');
+      this._txDirty = true;
       this.renderStats();
       Home.render();
     });
@@ -2197,6 +2240,7 @@ const Finance = {
     await DB.put('transactions', txData);
     App.closeSheet();
     App.toast(editId ? '已更新' : '已记账');
+    this._txDirty = true;
     this.render();
     Home.render();
   },
@@ -2279,6 +2323,7 @@ const Finance = {
       await DB.delete('transactions', id);
       App.closeSheet();
       App.toast('已删除');
+      this._txDirty = true;
       this.render();
       Home.render();
     });
@@ -2343,6 +2388,7 @@ const Finance = {
       await DB.delete('ledgers', id);
       const txs = await DB.getByIndex('transactions', 'ledgerId', id);
       for (const t of txs) await DB.delete('transactions', t.id);
+      this._txDirty = true; // 删账本连带删交易，失效交易缓存
       if (this.currentLedgerId === id) {
         this.currentLedgerId = ledgers.find(l => l.id !== id).id;
         await DB.setMeta('currentLedgerId', this.currentLedgerId);
@@ -3530,7 +3576,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.7';
+const BUILD_VERSION = '1.3.8';
 
 const App = {
   currentPage: 'home',
