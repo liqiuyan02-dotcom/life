@@ -349,6 +349,34 @@ input[type="number"] { -webkit-appearance: none; }
 .bulk-sel-info { margin-top:10px; font-size:13px; color:var(--text-secondary); }
 .list-item-time { font-size: 12px; color: var(--text-light); }
 
+/* ========== 总账单本：账本角标 + 过滤栏 ========== */
+.ledger-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-bar { padding: 6px 0 4px; }
+.filter-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.filter-label { font-size: 12px; color: var(--text-light); flex-shrink: 0; width: 28px; }
+.filter-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-chip.active { background: var(--primary); color: #fff; }
+
 /* ========== 空状态 ========== */
 .empty-state {
   text-align: center;
@@ -1254,6 +1282,9 @@ const Utils = {
 const Finance = {
   currentLedgerId: null,
   currentTab: 'list',
+  filterCat: -1,            // -1 = 全部分类
+  filterSettle: 'all',      // all | settled | unsettled
+  _formLedgerId: null,      // 记账表单当前所属账本
   ledgerColors: ['#00b894','#0984e3','#6c5ce7','#e17055','#fd79a8','#00cec9','#fdcb6e'],
   txCategories: [
     { name: '餐饮', icon: '🍔', color: 0 },
@@ -1299,8 +1330,9 @@ const Finance = {
 
   async renderLedgerSelector() {
     const ledgers = await DB.getAll('ledgers');
+    const allChip = `<div class="ledger-chip ${this.currentLedgerId === '__ALL__' ? 'active' : ''}" onclick="Finance.selectLedger('__ALL__')">📒 总账单本</div>`;
     const el = document.getElementById('ledgerSelector');
-    el.innerHTML = ledgers.map(l => `
+    el.innerHTML = allChip + ledgers.map(l => `
       <div class="ledger-chip ${l.id === this.currentLedgerId ? 'active' : ''}" onclick="Finance.selectLedger('${l.id}')">${Utils.escape(l.name)}</div>
     `).join('') + `<div class="ledger-chip" onclick="Finance.showAddLedger()" style="color:var(--text-light)">+ 新建</div>`;
   },
@@ -1331,18 +1363,52 @@ const Finance = {
   },
 
   async renderList() {
-    const ledger = await this.getCurrentLedger();
-    if (!ledger) return;
-    const txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    const allMode = this.currentLedgerId === '__ALL__';
+
+    // 账本映射（总账模式用于角标 + 按各自账本解析付款人）
+    const ledgers = await DB.getAll('ledgers');
+    const ledgerMap = {};
+    ledgers.forEach(l => ledgerMap[l.id] = l);
+
+    let txs;
+    if (allMode) {
+      txs = await DB.getAll('transactions');
+    } else {
+      const ledger = await this.getCurrentLedger();
+      if (!ledger) return;
+      txs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
+    }
+
+    // 筛选：分类
+    if (this.filterCat >= 0) txs = txs.filter(t => (t.categoryIdx || 0) === this.filterCat);
+    // 筛选：清算状态
+    if (this.filterSettle === 'settled') txs = txs.filter(t => t.settlementId);
+    else if (this.filterSettle === 'unsettled') txs = txs.filter(t => !t.settlementId);
+
     txs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const el = document.getElementById('financeContent');
+
+    // 过滤栏
+    const catChips = [`<div class="filter-chip ${this.filterCat < 0 ? 'active' : ''}" onclick="Finance.setFilter('cat', -1)">全部</div>`]
+      .concat(this.txCategories.map((c, i) => {
+        const color = this.ledgerColors[c.color || 0];
+        const active = this.filterCat === i;
+        return `<div class="filter-chip ${active ? 'active' : ''}" ${active ? `style="background:${color};color:#fff"` : ''} onclick="Finance.setFilter('cat', ${i})">${c.icon} ${c.name}</div>`;
+      })).join('');
+    const settleChips = [
+      `<div class="filter-chip ${this.filterSettle === 'all' ? 'active' : ''}" onclick="Finance.setFilter('settle', 'all')">全部</div>`,
+      `<div class="filter-chip ${this.filterSettle === 'settled' ? 'active' : ''}" onclick="Finance.setFilter('settle', 'settled')">已清算</div>`,
+      `<div class="filter-chip ${this.filterSettle === 'unsettled' ? 'active' : ''}" onclick="Finance.setFilter('settle', 'unsettled')">未清算</div>`,
+    ].join('');
+    const filterBar = `<div class="filter-bar"><div class="filter-row"><span class="filter-label">分类</span>${catChips}</div><div class="filter-row"><span class="filter-label">清算</span>${settleChips}</div></div>`;
+
     if (txs.length === 0) {
-      el.innerHTML = `<div class="empty-state"><div class="icon">💰</div><div class="text">还没有记账，点击右下角 + 开始</div></div>`;
+      el.innerHTML = filterBar + `<div class="empty-state"><div class="icon">💰</div><div class="text">${allMode ? '总账单本暂无符合筛选的账目' : '还没有记账，点击右下角 + 开始'}</div></div>`;
       return;
     }
 
-    let html = '';
+    let html = filterBar;
     let lastDate = '';
     for (const tx of txs) {
       const txDate = tx.date.slice(0, 10);
@@ -1354,12 +1420,18 @@ const Finance = {
         lastDate = txDate;
       }
       const cat = this.txCategories[tx.categoryIdx] || this.txCategories[7];
-      const payer = ledger.members[tx.payerIdx] || '?';
+      const txLedger = ledgerMap[tx.ledgerId];
+      const members = txLedger ? txLedger.members : ['?'];
+      const payer = members[tx.payerIdx] || '?';
       const amtHtml = tx.amountUnknown
         ? `<span style="color:var(--warning)">未知</span>`
         : Utils.formatMoney(tx.amount);
       const settleTag = tx.settlementId
         ? `<span style="font-size:11px;color:var(--text-light);border:1px solid var(--text-light);border-radius:4px;padding:0 4px;margin-left:4px">已清算</span>`
+        : '';
+      // 总账单本：右上角标注所属账本
+      const ledgerBadge = (allMode && txLedger)
+        ? `<span class="ledger-badge" style="background:${this.ledgerColors[txLedger.color || 0]}22;color:${this.ledgerColors[txLedger.color || 0]}">📒 ${Utils.escape(txLedger.name)}</span>`
         : '';
       html += `
         <div class="card" style="padding:14px 16px;margin-bottom:8px" onclick="Finance.showEditTransaction('${tx.id}')">
@@ -1370,6 +1442,7 @@ const Finance = {
               <div class="list-item-sub">${Utils.escape(payer)} 付款 · ${tx.participantIdxs.length}人分摊</div>
             </div>
             <div class="list-item-right">
+              ${ledgerBadge}
               ${tx.amountUnknown ? `
                 <div class="quick-fill" onclick="event.stopPropagation()">
                   <input class="qf-input" type="number" inputmode="decimal" placeholder="金额" id="qf_${tx.id}" onclick="event.stopPropagation()">
@@ -1382,6 +1455,13 @@ const Finance = {
         </div>`;
     }
     el.innerHTML = html;
+  },
+
+  // 列表筛选：分类 / 清算状态
+  setFilter(type, val) {
+    if (type === 'cat') this.filterCat = val;
+    else if (type === 'settle') this.filterSettle = val;
+    this.renderList();
   },
 
   // 金额未知的账单，在列表内快速补全金额（不用进编辑页）
@@ -1399,6 +1479,10 @@ const Finance = {
   },
 
   async renderStats() {
+    if (this.currentLedgerId === '__ALL__') {
+      document.getElementById('financeContent').innerHTML = `<div class="empty-state"><div class="icon">📊</div><div class="text">统计按单个账本计算，请选择具体账本查看</div></div>`;
+      return;
+    }
     const ledger = await this.getCurrentLedger();
     if (!ledger) return;
     const allTxs = await DB.getByIndex('transactions', 'ledgerId', ledger.id);
@@ -1639,6 +1723,10 @@ const Finance = {
   },
 
   async renderMembers() {
+    if (this.currentLedgerId === '__ALL__') {
+      document.getElementById('financeContent').innerHTML = `<div class="empty-state"><div class="icon">👥</div><div class="text">成员按单个账本管理，请选择具体账本查看</div></div>`;
+      return;
+    }
     const ledger = await this.getCurrentLedger();
     if (!ledger) return;
 
@@ -1733,7 +1821,10 @@ const Finance = {
   },
 
   async showSettlement(ledgerId) {
-    const activeId = ledgerId || this.currentLedgerId;
+    let activeId = ledgerId;
+    if (!activeId) activeId = this.currentLedgerId === '__ALL__'
+      ? (await DB.getAll('ledgers'))[0]?.id
+      : this.currentLedgerId;
     const ledger = await DB.get('ledgers', activeId);
     if (!ledger) { App.toast('未找到账本'); return; }
     const ledgers = await DB.getAll('ledgers');
@@ -1911,8 +2002,18 @@ const Finance = {
   },
 
   async _renderTxForm(editTx) {
-    const ledger = await this.getCurrentLedger();
-    if (!ledger) return;
+    let ledger;
+    if (editTx && editTx.ledgerId) {
+      ledger = await DB.get('ledgers', editTx.ledgerId);
+    } else if (this.currentLedgerId === '__ALL__') {
+      const ledgers = await DB.getAll('ledgers');
+      ledger = ledgers[0];
+      if (ledger) App.toast('将记入「' + ledger.name + '」账本');
+    } else {
+      ledger = await this.getCurrentLedger();
+    }
+    if (!ledger) { App.toast('请先创建账本'); return; }
+    this._formLedgerId = ledger.id;
 
     const isEdit = !!editTx;
     const tx = editTx || {
@@ -2042,7 +2143,9 @@ const Finance = {
 
   async saveTransaction(editId) {
     const fs = this._formState;
-    const ledger = await this.getCurrentLedger();
+    const ledgerId = this._formLedgerId || (await this.getCurrentLedger())?.id;
+    const ledger = await DB.get('ledgers', ledgerId);
+    if (!ledger) { App.toast('请先选择账本'); return; }
     const note = document.getElementById('txNote').value.trim();
     const unknown = !!fs.amountUnknown;
 
@@ -3412,7 +3515,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.1';
+const BUILD_VERSION = '1.3.2';
 
 const App = {
   currentPage: 'home',
