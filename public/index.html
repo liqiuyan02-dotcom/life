@@ -748,6 +748,7 @@ input[type="number"] { -webkit-appearance: none; }
 /* 设置页 */
 .setting-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   padding: 16px;
   border-bottom: 1px solid var(--border);
@@ -756,6 +757,7 @@ input[type="number"] { -webkit-appearance: none; }
 .setting-item:last-child { border-bottom: none; }
 .setting-item .si-icon { font-size: 20px; width: 28px; text-align: center; }
 .setting-item .si-label { flex: 1; font-size: 15px; }
+.setting-item .si-sub { width: 100%; font-size: 11px; color: var(--text-light); margin-top: 2px; }
 .setting-item .si-arrow { color: var(--text-light); }
 
 /* ===== 登录界面 ===== */
@@ -3528,7 +3530,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.3.5';
+const BUILD_VERSION = '1.3.6';
 
 const App = {
   currentPage: 'home',
@@ -3870,8 +3872,27 @@ const App = {
         (c.note || '').replace(/[,\n]/g, ' ')
       ]);
       const toCsv = (h, rows) => '﻿' + [h.join(','), ...rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(','))].join('\r\n');
-      this._downloadFile('生活台账目_' + Utils.todayStr() + '.csv', toCsv(txHeader, txRows), 'text/csv;charset=utf-8');
-      this._downloadFile('生活台打卡_' + Utils.todayStr() + '.csv', toCsv(chHeader, chRows), 'text/csv;charset=utf-8');
+      const txCsv = toCsv(txHeader, txRows);
+      const chCsv = toCsv(chHeader, chRows);
+      const f1 = '生活台账目_' + Utils.todayStr() + '.csv';
+      const f2 = '生活台打卡_' + Utils.todayStr() + '.csv';
+      const b1 = new Blob([txCsv], { type: 'text/csv;charset=utf-8' });
+      const b2 = new Blob([chCsv], { type: 'text/csv;charset=utf-8' });
+      // 手机端优先用系统分享（可同时存两个文件/发微信），不支持再下载
+      const files = [];
+      try { files.push(new File([b1], f1, { type: 'text/csv' })); } catch (e) {}
+      try { files.push(new File([b2], f2, { type: 'text/csv' })); } catch (e) {}
+      if (files.length && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files })) {
+        try {
+          await navigator.share({ files, title: '生活台 Excel 表', text: '账目与打卡 CSV' });
+          this.toast('已调起系统分享，可存到「文件」或发微信');
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') { this.toast('已取消'); return; }
+        }
+      }
+      this._downloadFile(f1, txCsv, 'text/csv;charset=utf-8');
+      this._downloadFile(f2, chCsv, 'text/csv;charset=utf-8');
       this.toast('已导出账目与打卡 Excel 表（CSV）');
     })();
   },
@@ -4027,6 +4048,7 @@ const App = {
         <div class="setting-item" onclick="App.exportData()">
           <div class="si-icon">📤</div>
           <div class="si-label">导出全部数据（备份）</div>
+          <div class="si-sub">手机端会调起系统分享，可存到「文件」或发微信</div>
           <div class="si-arrow">›</div>
         </div>
         <div class="setting-item" onclick="App.importData()">
@@ -4073,6 +4095,34 @@ const App = {
     this.openSheet(html);
   },
 
+  // 优先用系统分享：手机可直接存到「文件」App / 微信 / 钉钉；不支持时回退浏览器下载
+  async shareOrDownload(blob, filename, opts = {}) {
+    let file = null;
+    try { file = new File([blob], filename, { type: blob.type || 'application/octet-stream' }); }
+    catch (e) { file = blob; }
+    const canShare = typeof navigator !== 'undefined' && navigator.canShare &&
+      (file instanceof Blob ? navigator.canShare({ files: [file] }) : false);
+    if (canShare) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: opts.title || '生活台数据',
+          text: opts.text || '生活台数据备份'
+        });
+        return 'shared';
+      } catch (e) {
+        if (e && e.name === 'AbortError') return 'cancelled'; // 用户取消分享
+        // 分享失败，继续走下载兜底
+      }
+    }
+    // 回退：浏览器下载
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return 'downloaded';
+  },
+
   async exportData() {
     let data;
     if (DB.mode === 'cloud') {
@@ -4106,13 +4156,11 @@ const App = {
       };
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `生活台备份_${Utils.todayStr()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    App.toast('已导出');
+    const filename = `生活台备份_${Utils.todayStr()}.json`;
+    const res = await App.shareOrDownload(blob, filename, { title: '生活台数据备份', text: '我的生活台全量备份' });
+    if (res === 'shared') App.toast('已调起系统分享，可存到「文件」或发微信');
+    else if (res === 'cancelled') App.toast('已取消');
+    else App.toast('已导出（浏览器下载）');
   },
 
   importData() {
