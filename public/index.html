@@ -3233,10 +3233,9 @@ const Notes = {
   // 右上角 + 按钮：按当前子 Tab 决定行为
   onAddClick() {
     if (this._subTab === 'diary') {
-      const i = document.getElementById('diaryInput');
-      if (i) { i.focus(); document.getElementById('pageContainer').scrollTop = 0; }
+      Diary.showEdit(null);          // 弹出「记一笔」表单（默认今天，可改日期）
     } else if (this._subTab === 'calendar') {
-      this.switchTab('diary', document.querySelectorAll('#notesSeg .segment-item')[1]);
+      Calendar.onAddClick();         // 日历：记到选中日期（默认今天）
     } else {
       this.showAddNote();
     }
@@ -3510,15 +3509,24 @@ const Diary = {
     this.render();
   },
 
-  showEdit(id) { this._renderForm(id); },
+  showEdit(id, targetDate) { this._renderForm(id, targetDate); },
 
-  async _renderForm(editId) {
+  async _renderForm(editId, targetDate) {
     const d = editId ? await DB.get('diary', editId) : null;
     const content = d ? d.content : '';
     const mood = d ? (d.mood || '') : this._mood;
+    const dateVal = d ? d.date : (targetDate || Utils.localDate());
+    this._targetDate = d ? d.date : dateVal;
+    // 新增时允许选日期（记到过去/未来某天）；编辑状态下不改日期
+    const dateInput = editId ? '' : `
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input type="date" id="diaryDate" class="form-input" value="${dateVal}">
+      </div>`;
     const html = `
       <div class="sheet-handle"></div>
       <div class="sheet-title">${editId ? '编辑日记' : '记一笔'}</div>
+      ${dateInput}
       <div class="form-group">
         <textarea id="diaryContent" class="form-textarea" placeholder="写点什么…" rows="4">${Utils.escape(content)}</textarea>
       </div>
@@ -3549,23 +3557,33 @@ const Diary = {
     if (!content) { App.toast('请输入内容'); return; }
     const activeMood = document.querySelector('#diaryMoodsEdit .mood-btn.active');
     const mood = activeMood ? activeMood.textContent : '';
-    await this._save({ content, mood, editId: editId || null });
+    const dateInput = document.getElementById('diaryDate');
+    const targetDate = dateInput ? dateInput.value : (this._targetDate || Utils.localDate());
+    await this._save({ content, mood, editId: editId || null, targetDate });
     App.closeSheet();
     App.toast(editId ? '已更新' : '已记录');
     if (Notes._subTab === 'diary') this.render();
+    else if (Notes._subTab === 'calendar') Calendar.render();
   },
 
-  async _save({ content, mood, editId }) {
+  async _save({ content, mood, editId, targetDate }) {
     const now = new Date();
     const iso = now.toISOString();
-    const date = Utils.localDate(now);
+    let date, timestamp;
+    if (targetDate && !editId) {
+      date = targetDate;
+      timestamp = targetDate + 'T12:00:00';   // 本地中午，规避 UTC 跨天
+    } else {
+      date = Utils.localDate(now);
+      timestamp = iso;
+    }
     let data;
     if (editId) {
       data = await DB.get('diary', editId) || { id: editId };
       data.content = content;
       data.mood = mood || '';
     } else {
-      data = { id: Utils.uid(), content, mood: mood || '', timestamp: iso, date, createdAt: iso };
+      data = { id: Utils.uid(), content, mood: mood || '', timestamp, date, createdAt: iso };
     }
     await DB.put('diary', data);
   },
@@ -3587,6 +3605,7 @@ const Diary = {
 const Calendar = {
   _year: null,
   _month: null,   // 0-based；null = 当前月
+  _selectedDay: null,
 
   _ctx() {
     const now = new Date();
@@ -3655,7 +3674,14 @@ const Calendar = {
     this._year = y; this._month = m; this.render();
   },
 
+  // 日历页点 + ：记到当前选中的日期（若没打开某天，默认今天）
+  onAddClick() {
+    const day = this._selectedDay || Utils.localDate();
+    Diary.showEdit(null, day);
+  },
+
   async openDay(key) {
+    this._selectedDay = key;
     const [y, m, d] = key.split('-').map(Number);
     const diary = (await DB.getAll('diary')).filter(x => (x.date || Utils.localDate(x.timestamp)) === key)
       .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
@@ -3897,7 +3923,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.5.0';
+const BUILD_VERSION = '1.5.1';
 
 const App = {
   currentPage: 'home',
