@@ -552,6 +552,53 @@ input[type="number"] { -webkit-appearance: none; }
   margin-bottom: 12px;
 }
 
+/* ========== 日记（流水时间线） ========== */
+.diary-quick { display: flex; gap: 8px; padding: 4px 16px 8px; }
+.diary-input { flex: 1; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 14px; background: var(--card-bg); }
+.diary-input:focus { outline: none; border-color: var(--primary); }
+.diary-add { flex-shrink: 0; border-radius: 14px; padding: 0 18px; }
+.diary-moods { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 16px 12px; }
+.mood-btn { font-size: 20px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--bg); cursor: pointer; transition: transform .12s, background .12s; }
+.mood-btn:active { transform: scale(0.9); }
+.mood-btn.active { background: #fff3cd; box-shadow: 0 0 0 2px var(--primary); }
+.diary-day { margin: 4px 16px 14px; }
+.diary-day-head { font-size: 13px; font-weight: 700; color: var(--text-secondary); margin: 8px 2px; display: flex; align-items: center; gap: 6px; }
+.diary-day-head::before { content: ''; width: 4px; height: 14px; border-radius: 2px; background: var(--primary); }
+.diary-item { display: flex; align-items: stretch; gap: 10px; background: var(--card-bg); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; }
+.diary-time { font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums; padding-top: 2px; min-width: 38px; }
+.diary-body { flex: 1; font-size: 15px; line-height: 1.5; word-break: break-word; }
+.diary-mood { margin-right: 4px; }
+.diary-del { color: var(--text-light); font-size: 16px; align-self: center; padding: 0 4px; }
+.diary-del:active { color: var(--danger); }
+
+/* ========== 日历 ========== */
+.cal-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; }
+.cal-title { font-size: 16px; font-weight: 700; }
+.cal-nav { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--bg); font-size: 20px; color: var(--text-secondary); cursor: pointer; }
+.cal-nav:active { background: var(--border); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 4px 12px; }
+.cal-cell { aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 12px; font-size: 14px; position: relative; background: var(--card-bg); }
+.cal-week .cal-cell, .cal-wd { background: transparent; color: var(--text-light); font-size: 12px; aspect-ratio: auto; padding: 4px 0; }
+.cal-empty { background: transparent; }
+.cal-has { cursor: pointer; }
+.cal-has:active { background: var(--bg); }
+.cal-today { background: var(--primary); color: #fff; font-weight: 700; }
+.cal-badges { display: flex; gap: 2px; margin-top: 2px; }
+.cal-dot { font-size: 10px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
+.cal-dot-diary { background: #fdcb6e; }
+.cal-dot-note { background: #74b9ff; }
+.cal-legend { text-align: center; font-size: 12px; color: var(--text-light); padding: 8px 0 4px; }
+.cal-detail { margin: 8px 16px 16px; background: var(--card-bg); border-radius: 16px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.cal-detail-head { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.cal-detail-sub { font-size: 13px; color: var(--text-secondary); font-weight: 600; margin: 10px 0 4px; }
+.cal-detail-empty { color: var(--text-light); font-size: 14px; padding: 8px 0; }
+.cal-detail-item { display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 14px; cursor: pointer; }
+.cal-detail-item:last-child { border-bottom: none; }
+.cal-detail-time { color: var(--text-light); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 36px; }
+.cal-detail-mood { font-size: 16px; }
+.cal-detail-note { font-size: 14px; }
+.cal-detail-text { flex: 1; word-break: break-word; line-height: 1.5; }
+
 /* ========== 结算卡片 ========== */
 .settlement-card {
   background: var(--card-bg);
@@ -872,11 +919,23 @@ input[type="number"] { -webkit-appearance: none; }
     <div class="page" id="page-notes">
       <div class="page-header">
         <div class="page-title">📝 记事</div>
-        <div class="btn-icon" onclick="Notes.showAddNote()">+</div>
+        <div class="btn-icon" id="notesAddBtn" onclick="Notes.onAddClick()">+</div>
       </div>
-      <input class="search-box" id="noteSearch" placeholder="搜索笔记..." oninput="Notes.render()">
-      <div class="chip-group" id="noteCatFilter" style="margin-bottom:12px;overflow-x:auto;flex-wrap:nowrap"></div>
-      <div id="notesList"></div>
+      <div class="segment" id="notesSeg" style="margin:0 16px 12px">
+        <div class="segment-item active" onclick="Notes.switchTab('notes', this)">📒 笔记</div>
+        <div class="segment-item" onclick="Notes.switchTab('diary', this)">📔 日记</div>
+        <div class="segment-item" onclick="Notes.switchTab('calendar', this)">📅 日历</div>
+      </div>
+      <!-- 笔记 -->
+      <div id="notesPane">
+        <input class="search-box" id="noteSearch" placeholder="搜索笔记..." oninput="Notes.render()">
+        <div class="chip-group" id="noteCatFilter" style="margin-bottom:12px;overflow-x:auto;flex-wrap:nowrap"></div>
+        <div id="notesList"></div>
+      </div>
+      <!-- 日记 -->
+      <div id="diaryPane" style="display:none"></div>
+      <!-- 日历 -->
+      <div id="calendarPane" style="display:none"></div>
     </div>
 
   </div>
@@ -931,7 +990,7 @@ const DB = {
   mode: 'local',
   token: null,
   DB_NAME: 'WorkbenchDB',
-  DB_VERSION: 2,
+  DB_VERSION: 3,
   apiBase: (function () {
     const isFile = (typeof location !== 'undefined' && location.protocol === 'file:');
     // 通过 http(s) 打开（如 Render 同源部署）：始终走同源，忽略本地缓存的旧服务器地址，
@@ -985,6 +1044,9 @@ const DB = {
         if (!db.objectStoreNames.contains('settlements')) {
           const store = db.createObjectStore('settlements', { keyPath: 'id' });
           store.createIndex('ledgerId', 'ledgerId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('diary')) {
+          db.createObjectStore('diary', { keyPath: 'id' });
         }
       };
       req.onsuccess = (e) => { this.db = e.target.result; resolve(this.db); };
@@ -1219,6 +1281,12 @@ const Utils = {
   uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
 
   todayStr() { return new Date().toISOString().slice(0, 10); },
+  // 本地日期（YYYY-MM-DD），避免 toISOString 的 UTC 跨天误差，用于日记/日历按天分组
+  localDate(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+  todayLocal() { return this.localDate(); },
 
   formatDate(date) {
     const d = typeof date === 'string' ? new Date(date) : date;
@@ -1230,6 +1298,13 @@ const Utils = {
     if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
     const m = d.getMonth() + 1, day = d.getDate();
     return `${m}月${day}日`;
+  },
+
+  // "8月27日 周四" 形式，用于日记按天分组标题
+  formatDateCN2(dateStr) {
+    const d = new Date(dateStr);
+    const wd = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+    return `${d.getMonth() + 1}月${d.getDate()}日 周${wd}`;
   },
 
   formatDateTime(date) {
@@ -3031,6 +3106,7 @@ const Habits = {
  * ============================================================ */
 const Notes = {
   filterCategory: null,
+  _subTab: 'notes',        // notes | diary | calendar
   defaultCategories: [
     { name: '工作', color: 4 },
     { name: '生活', color: 3 },
@@ -3132,6 +3208,38 @@ const Notes = {
   setFilter(catId) {
     this.filterCategory = catId;
     this.render();
+  },
+
+  // 记事页子 Tab：笔记 / 日记 / 日历
+  switchTab(sub, el) {
+    this._subTab = sub;
+    document.querySelectorAll('#notesSeg .segment-item').forEach(s => s.classList.remove('active'));
+    if (el) el.classList.add('active');
+    document.getElementById('notesPane').style.display = sub === 'notes' ? 'block' : 'none';
+    document.getElementById('diaryPane').style.display = sub === 'diary' ? 'block' : 'none';
+    document.getElementById('calendarPane').style.display = sub === 'calendar' ? 'block' : 'none';
+    if (sub === 'diary') Diary.render();
+    else if (sub === 'calendar') Calendar.render();
+    else this.render();
+  },
+
+  // 当前子 Tab 渲染（进记事页时调用）
+  renderCurrent() {
+    if (this._subTab === 'diary') return Diary.render();
+    if (this._subTab === 'calendar') return Calendar.render();
+    return this.render();
+  },
+
+  // 右上角 + 按钮：按当前子 Tab 决定行为
+  onAddClick() {
+    if (this._subTab === 'diary') {
+      const i = document.getElementById('diaryInput');
+      if (i) { i.focus(); document.getElementById('pageContainer').scrollTop = 0; }
+    } else if (this._subTab === 'calendar') {
+      this.switchTab('diary', document.querySelectorAll('#notesSeg .segment-item')[1]);
+    } else {
+      this.showAddNote();
+    }
   },
 
   showAddNote() {
@@ -3321,6 +3429,269 @@ const Notes = {
       App.toast('已删除');
       this.showCategoryManage();
     });
+  }
+};
+
+/* ============================================================
+ *  日记模块（流水时间线，一小条一小条记录）
+ * ============================================================ */
+const Diary = {
+  _mood: '',
+  _MOODS: ['😀', '😊', '😐', '😟', '😴', '🤩', '😡', '❤️'],
+
+  async render() {
+    const pane = document.getElementById('diaryPane');
+    const items = await DB.getAll('diary');
+    items.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+    const groups = {};
+    for (const it of items) {
+      const d = it.date || Utils.localDate(it.timestamp);
+      (groups[d] = groups[d] || []).push(it);
+    }
+    const dayKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+    let html = `
+      <div class="diary-quick">
+        <input class="diary-input" id="diaryInput" placeholder="此刻发生了什么…（回车记录）" onkeydown="Diary.onKeydown(event)">
+        <button class="btn btn-primary diary-add" onclick="Diary.addFromInput()">记一条</button>
+      </div>
+      <div class="diary-moods" id="diaryMoods">
+        ${this._MOODS.map(m => `<span class="mood-btn" onclick="Diary.pickMood('${m}', this)">${m}</span>`).join('')}
+      </div>
+    `;
+
+    if (items.length === 0) {
+      html += `<div class="empty-state"><div class="icon">📔</div><div class="text">还没有日记，上面输入框记一条吧</div></div>`;
+    } else {
+      for (const dk of dayKeys) {
+        const list = groups[dk];
+        html += `<div class="diary-day">
+          <div class="diary-day-head">${Utils.formatDateCN2(dk)}</div>`;
+        for (const it of list) {
+          const t = (it.timestamp || '').slice(11, 16) || '';
+          html += `
+            <div class="diary-item" onclick="Diary.showEdit('${it.id}')">
+              <div class="diary-time">${t}</div>
+              <div class="diary-body">
+                ${it.mood ? `<span class="diary-mood">${it.mood}</span>` : ''}
+                <span class="diary-text">${Utils.escape(it.content)}</span>
+              </div>
+              <div class="diary-del" onclick="event.stopPropagation();Diary.deleteItem('${it.id}')">🗑</div>
+            </div>`;
+        }
+        html += `</div>`;
+      }
+    }
+    pane.innerHTML = html;
+  },
+
+  pickMood(m, el) {
+    if (this._mood === m) { this._mood = ''; el.classList.remove('active'); }
+    else {
+      this._mood = m;
+      document.querySelectorAll('#diaryMoods .mood-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+    }
+  },
+
+  onKeydown(e) { if (e.key === 'Enter') { e.preventDefault(); this.addFromInput(); } },
+
+  async addFromInput() {
+    const inp = document.getElementById('diaryInput');
+    const content = inp.value.trim();
+    if (!content) { App.toast('请输入内容'); return; }
+    await this._save({ content, mood: this._mood, editId: null });
+    inp.value = '';
+    this._mood = '';
+    const mb = document.querySelectorAll('#diaryMoods .mood-btn');
+    if (mb) mb.forEach(b => b.classList.remove('active'));
+    App.toast('已记录');
+    this.render();
+  },
+
+  showEdit(id) { this._renderForm(id); },
+
+  async _renderForm(editId) {
+    const d = editId ? await DB.get('diary', editId) : null;
+    const content = d ? d.content : '';
+    const mood = d ? (d.mood || '') : this._mood;
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${editId ? '编辑日记' : '记一笔'}</div>
+      <div class="form-group">
+        <textarea id="diaryContent" class="form-textarea" placeholder="写点什么…" rows="4">${Utils.escape(content)}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">心情（可加可不加）</label>
+        <div class="diary-moods" id="diaryMoodsEdit">
+          ${this._MOODS.map(m => `<span class="mood-btn ${m === mood ? 'active' : ''}" onclick="Diary.pickMoodEdit('${m}', this)">${m}</span>`).join('')}
+        </div>
+      </div>
+      <div class="action-row">
+        ${editId ? `<button class="btn btn-danger" onclick="Diary.deleteItem('${editId}')">删除</button>` : ''}
+        <button class="btn btn-primary" onclick="Diary.saveFromForm('${editId || ''}')">保存</button>
+      </div>
+    `;
+    App.openSheet(html);
+  },
+
+  pickMoodEdit(m, el) {
+    if (el.classList.contains('active')) el.classList.remove('active');
+    else {
+      document.querySelectorAll('#diaryMoodsEdit .mood-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+    }
+  },
+
+  async saveFromForm(editId) {
+    const content = document.getElementById('diaryContent').value.trim();
+    if (!content) { App.toast('请输入内容'); return; }
+    const activeMood = document.querySelector('#diaryMoodsEdit .mood-btn.active');
+    const mood = activeMood ? activeMood.textContent : '';
+    await this._save({ content, mood, editId: editId || null });
+    App.closeSheet();
+    App.toast(editId ? '已更新' : '已记录');
+    if (Notes._subTab === 'diary') this.render();
+  },
+
+  async _save({ content, mood, editId }) {
+    const now = new Date();
+    const iso = now.toISOString();
+    const date = Utils.localDate(now);
+    let data;
+    if (editId) {
+      data = await DB.get('diary', editId) || { id: editId };
+      data.content = content;
+      data.mood = mood || '';
+    } else {
+      data = { id: Utils.uid(), content, mood: mood || '', timestamp: iso, date, createdAt: iso };
+    }
+    await DB.put('diary', data);
+  },
+
+  async deleteItem(id) {
+    App.confirm('删除这条日记？', async () => {
+      await DB.delete('diary', id);
+      App.closeSheet();
+      App.toast('已删除');
+      if (Notes._subTab === 'diary') this.render();
+      else if (Notes._subTab === 'calendar') Calendar.render();
+    });
+  }
+};
+
+/* ============================================================
+ *  日历模块（按天汇总日记与笔记）
+ * ============================================================ */
+const Calendar = {
+  _year: null,
+  _month: null,   // 0-based；null = 当前月
+
+  _ctx() {
+    const now = new Date();
+    const y = this._year != null ? this._year : now.getFullYear();
+    const m = this._month != null ? this._month : now.getMonth();
+    return { y, m };
+  },
+
+  async render() {
+    const { y, m } = this._ctx();
+    const diary = await DB.getAll('diary');
+    const notes = await DB.getAll('notes');
+    const byDay = {};
+    const bump = (k, key) => { byDay[k] = byDay[k] || { diary: 0, note: 0 }; byDay[k][key]++; };
+    for (const d of diary) bump(d.date || Utils.localDate(d.timestamp), 'diary');
+    for (const n of notes) bump(Utils.localDate(n.createdAt || n.updatedAt), 'note');
+
+    const first = new Date(y, m, 1);
+    const startWd = first.getDay();
+    const days = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < startWd; i++) cells.push(null);
+    for (let d = 1; d <= days; d++) cells.push(d);
+
+    const wk = ['日', '一', '二', '三', '四', '五', '六'];
+    const todayKey = Utils.todayLocal();
+    let html = `
+      <div class="cal-head">
+        <button class="cal-nav" onclick="Calendar.prev()">‹</button>
+        <div class="cal-title">${y}年${m + 1}月</div>
+        <button class="cal-nav" onclick="Calendar.next()">›</button>
+      </div>
+      <div class="cal-grid cal-week">
+        ${wk.map(w => `<div class="cal-cell cal-wd">${w}</div>`).join('')}
+      </div>
+      <div class="cal-grid">
+    `;
+    for (const c of cells) {
+      if (c === null) { html += `<div class="cal-cell cal-empty"></div>`; continue; }
+      const key = `${y}-${String(m + 1).padStart(2, '0')}-${String(c).padStart(2, '0')}`;
+      const info = byDay[key];
+      const isToday = key === todayKey;
+      let badge = '';
+      if (info) {
+        const parts = [];
+        if (info.diary) parts.push(`<span class="cal-dot cal-dot-diary">${info.diary}</span>`);
+        if (info.note) parts.push(`<span class="cal-dot cal-dot-note">${info.note}</span>`);
+        badge = `<div class="cal-badges">${parts.join('')}</div>`;
+      }
+      html += `<div class="cal-cell ${isToday ? 'cal-today' : ''} ${info ? 'cal-has' : ''}" onclick="Calendar.openDay('${key}')">${c}${badge}</div>`;
+    }
+    html += `</div>`;
+    html += `<div class="cal-legend">🟡 日记 · 🔵 笔记，点日期看当天</div>`;
+    html += `<div id="calDayDetail"></div>`;
+    document.getElementById('calendarPane').innerHTML = html;
+  },
+
+  prev() {
+    let { y, m } = this._ctx();
+    if (m === 0) { m = 11; y--; } else { m--; }
+    this._year = y; this._month = m; this.render();
+  },
+  next() {
+    let { y, m } = this._ctx();
+    if (m === 11) { m = 0; y++; } else { m++; }
+    this._year = y; this._month = m; this.render();
+  },
+
+  async openDay(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    const diary = (await DB.getAll('diary')).filter(x => (x.date || Utils.localDate(x.timestamp)) === key)
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    const notes = (await DB.getAll('notes')).filter(n => Utils.localDate(n.createdAt || n.updatedAt) === key);
+    const wd = ['日', '一', '二', '三', '四', '五', '六'][new Date(y, m - 1, d).getDay()];
+    let html = `<div class="cal-detail">
+      <div class="cal-detail-head">${y}年${m}月${d}日 周${wd}</div>`;
+    if (diary.length === 0 && notes.length === 0) {
+      html += `<div class="cal-detail-empty">这一天还没有记录</div>`;
+    } else {
+      if (diary.length) {
+        html += `<div class="cal-detail-sub">📔 日记 ${diary.length} 条</div>`;
+        for (const it of diary) {
+          const t = (it.timestamp || '').slice(11, 16);
+          html += `<div class="cal-detail-item" onclick="Diary.showEdit('${it.id}')">
+            <span class="cal-detail-time">${t}</span>
+            ${it.mood ? `<span class="cal-detail-mood">${it.mood}</span>` : ''}
+            <span class="cal-detail-text">${Utils.escape(it.content)}</span>
+          </div>`;
+        }
+      }
+      if (notes.length) {
+        html += `<div class="cal-detail-sub">📒 笔记 ${notes.length} 条</div>`;
+        for (const n of notes) {
+          const title = (n.title && n.title.trim()) ? n.title.trim() : (n.content || '').slice(0, 30);
+          html += `<div class="cal-detail-item" onclick="Notes.showEditNote('${n.id}')">
+            <span class="cal-detail-note">📒</span>
+            <span class="cal-detail-text">${Utils.escape(title)}</span>
+          </div>`;
+        }
+      }
+    }
+    html += `</div>`;
+    const box = document.getElementById('calDayDetail');
+    box.innerHTML = html;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 };
 
@@ -3526,7 +3897,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.4.0';
+const BUILD_VERSION = '1.5.0';
 
 const App = {
   currentPage: 'home',
@@ -3757,7 +4128,7 @@ const App = {
     if (page === 'home') Home.render();
     if (page === 'finance') Finance.render();
     if (page === 'habits') Habits.render();
-    if (page === 'notes') Notes.render();
+    if (page === 'notes') Notes.renderCurrent();
   },
 
   // ===== Sheet 管理 =====

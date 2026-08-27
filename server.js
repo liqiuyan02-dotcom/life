@@ -146,7 +146,7 @@ function authMiddleware(req, res, next) {
 }
 
 // ---------- 默认种子 ----------
-const STORE_WHITELIST = ['ledgers', 'transactions', 'habits', 'checkins', 'categories', 'notes', 'settlements'];
+const STORE_WHITELIST = ['ledgers', 'transactions', 'habits', 'checkins', 'categories', 'notes', 'settlements', 'diary'];
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 async function seedDefaults(db, userUid) {
