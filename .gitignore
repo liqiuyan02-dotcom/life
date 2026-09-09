@@ -2,3 +2,11 @@ node_modules/
 data/
 *.log
 .DS_Store
+
+# 腾讯云 CloudBase 部署配置：只留在本地打包使用，故意不推 GitHub。
+# 原因：仓库根目录一旦出现 Dockerfile，Render 可能会改判为 Docker 运行时，
+# 导致现有线上服务的构建方式被改变。文件留在本机即可正常打包上传。
+Dockerfile
+.dockerignore
+cloudbaserc.json
+

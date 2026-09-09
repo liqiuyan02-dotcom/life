@@ -6,11 +6,15 @@
  * 同源部署：后端同时用 express.static 托管 public/index.html，前端 fetch('/api/...') 同源。
  *
  * 启动： node server.js
+ * 存储后端优先级：CloudBase 云数据库 > PostgreSQL > 本地 JSON 文件
+ *
  * 环境变量：
- *   PORT           监听端口（Render 会注入）
+ *   PORT           监听端口（Render / CloudBase 会注入）
  *   SECRET        token 签名密钥
  *   DATABASE_URL   PostgreSQL 连接串（设置后启用持久化存储，推荐在 Render 上挂免费 Postgres）
  *   DATA_FILE     仅本地文件模式使用（默认 server/data/db.json）
+ *   TCB_ENV_ID     腾讯云 CloudBase 环境 ID（国内部署用，设置后启用云数据库，优先级最高）
+ *   TCB_COLL       CloudBase 集合名（默认 wb_bucket）
  */
 const express = require('express');
 const crypto = require('crypto');
@@ -20,7 +24,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3001;
 const SECRET = process.env.SECRET || 'workbench-dev-secret-change-me';
 const USE_PG = !!process.env.DATABASE_URL;
-const BUILD_VERSION = '1.3.5';
+const BUILD_VERSION = '1.6.1';
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 
 // ---------- PostgreSQL 连接（可选）----------
@@ -33,6 +37,25 @@ if (USE_PG) {
     max: 5,
   });
   pool.on('error', (e) => console.error('[pg] unexpected error', e.message));
+}
+
+// ---------- 腾讯云 CloudBase 云数据库（可选，国内部署时启用）----------
+// 设置了 TCB_ENV_ID 时启用，优先级最高。为规避「单文档 16MB」上限，
+// 这里不把整个库存进一个文档，而是拆成：账号表 1 个文档 + 每个用户 1 个文档。
+const TCB_ENV = process.env.TCB_ENV_ID || process.env.TCB_ENV || '';
+const TCB_COLL = process.env.TCB_COLL || 'wb_bucket';
+const TCB_USERS_DOC = '__users__';
+let tcbColl = null;
+if (TCB_ENV) {
+  try {
+    const cloudbase = require('@cloudbase/node-sdk');
+    const tcbApp = cloudbase.init({ env: TCB_ENV });
+    tcbColl = tcbApp.database().collection(TCB_COLL);
+    console.log(`[store] CloudBase ready (env=${TCB_ENV}, collection=${TCB_COLL})`);
+  } catch (e) {
+    console.error('[store] CloudBase init failed, fallback:', e.message);
+    tcbColl = null;
+  }
 }
 
 const app = express();
@@ -63,6 +86,28 @@ app.use((req, res, next) => {
 const EMPTY_DB = () => ({ users: {}, data: {} });
 
 async function loadDB() {
+  if (tcbColl) {
+    const db = EMPTY_DB();
+    // 账号表
+    const u = await tcbColl.doc(TCB_USERS_DOC).get();
+    const uArr = (u && u.data) || [];
+    const uRow = Array.isArray(uArr) ? uArr[0] : uArr;
+    if (uRow && uRow.value) db.users = uRow.value;
+    // 每个用户一个文档：拉全量（用户数很少，一次分页即可）
+    let skip = 0;
+    for (;;) {
+      const page = await tcbColl.skip(skip).limit(100).get();
+      const rows = (page && page.data) || [];
+      for (const r of rows) {
+        if (!r || r._id === TCB_USERS_DOC) continue;
+        if (r.value) db.data[r._id] = r.value;
+      }
+      if (rows.length < 100) break;
+      skip += rows.length;
+      if (skip > 5000) break; // 安全阀，避免意外死循环
+    }
+    return db;
+  }
   if (USE_PG) {
     const r = await pool.query("SELECT value FROM kv WHERE key = 'db'");
     if (r.rows.length) return r.rows[0].value;
@@ -76,6 +121,19 @@ async function loadDB() {
 }
 
 async function saveDB(db) {
+  if (tcbColl) {
+    await tcbColl.doc(TCB_USERS_DOC).set({ value: db.users || {} });
+    const ids = Object.keys(db.data || {});
+    for (const id of ids) {
+      const payload = JSON.stringify(db.data[id]);
+      if (payload.length > 14 * 1024 * 1024) {
+        // 单文档上限 16MB，留 2MB 余量；超限通常是记账照片 base64 太多
+        console.error(`[tcb] 用户 ${id} 数据 ${payload.length} 字节，逼近单文档 16MB 上限，建议把照片迁移到对象存储`);
+      }
+      await tcbColl.doc(id).set({ value: JSON.parse(payload) });
+    }
+    return;
+  }
   if (USE_PG) {
     await pool.query(
       "INSERT INTO kv (key, value) VALUES ('db', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -269,7 +327,11 @@ app.put('/api/auth/profile', authMiddleware, async (req, res) => {
 });
 
 // ---------- 健康检查（公开，必须放在通用 /api/:store 之前）----------
-app.get('/api/health', (req, res) => res.json({ ok: true, storage: USE_PG ? 'postgres' : 'file', buildVersion: BUILD_VERSION }));
+app.get('/api/health', (req, res) => res.json({
+  ok: true,
+  storage: tcbColl ? 'cloudbase' : (USE_PG ? 'postgres' : 'file'),
+  buildVersion: BUILD_VERSION
+}));
 
 // ---------- 种子 ----------
 app.post('/api/seed-defaults', authMiddleware, async (req, res) => {
