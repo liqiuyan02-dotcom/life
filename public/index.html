@@ -570,6 +570,10 @@ input[type="number"] { -webkit-appearance: none; }
 .diary-mood { margin-right: 4px; }
 .diary-del { color: var(--text-light); font-size: 16px; align-self: center; padding: 0 4px; }
 .diary-del:active { color: var(--danger); }
+.diary-today-head { font-size: 13px; font-weight: 700; color: var(--text-secondary); margin: 10px 18px 4px; display: flex; align-items: center; gap: 6px; }
+.diary-today-head::before { content: ''; width: 4px; height: 14px; border-radius: 2px; background: var(--primary); }
+.diary-history-hint { margin: 14px 16px 4px; padding: 12px 14px; border-radius: 14px; background: var(--bg); color: var(--primary); font-size: 14px; font-weight: 600; text-align: center; cursor: pointer; }
+.diary-history-hint:active { opacity: .7; }
 
 /* ========== 日历 ========== */
 .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; }
@@ -1342,6 +1346,31 @@ const Utils = {
     return t && t.amountUnknown ? 0 : (Number(t && t.amount) || 0);
   },
 
+  // 纯 SVG（无外链/无 foreignObject）转 PNG，移动端可长按保存
+  svgToPng(svg, scale = 2) {
+    return new Promise((resolve, reject) => {
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, img.width * scale);
+          canvas.height = Math.max(1, img.height * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob(b => {
+            URL.revokeObjectURL(url);
+            if (b) resolve(b); else reject(new Error('toBlob 返回空'));
+          }, 'image/png');
+        } catch (e) { URL.revokeObjectURL(url); reject(e); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG 渲染失败')); };
+      img.src = url;
+    });
+  },
+
   weekDay() {
     return ['日','一','二','三','四','五','六'][new Date().getDay()];
   },
@@ -1938,6 +1967,70 @@ const Finance = {
     return { balances, transfers };
   },
 
+  // 生成「清算单」SVG 图片字符串（纯图形+文字，可被 svgToPng 转 PNG）
+  buildSettlementSVG(info) {
+    const W = 720, P = 36, CW = W - 2 * P;
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const money = v => Utils.formatMoney(v);
+    const F = "-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif";
+    const left = (txt, x, y, color, size, weight) => `<text x="${x}" y="${y}" font-family="${F}" font-size="${size || 22}" font-weight="${weight || 400}" fill="${color}">${esc(txt)}</text>`;
+    const right = (txt, x, y, color, size) => `<text x="${x}" y="${y}" text-anchor="end" font-family="${F}" font-size="${size || 24}" font-weight="700" fill="${color}">${esc(txt)}</text>`;
+    const parts = [];
+    let y = 0;
+    // 头部
+    parts.push(`<rect x="0" y="0" width="${W}" height="150" fill="#6C5CE7"/>`);
+    parts.push(`<text x="${P}" y="74" font-family="${F}" font-size="42" font-weight="700" fill="#ffffff">清算单</text>`);
+    parts.push(`<text x="${P}" y="116" font-family="${F}" font-size="24" fill="#E8E4FF">${esc(info.ledgerName)} · ${esc(info.dateStr)}</text>`);
+    y = 150 + 24;
+    // 概况
+    parts.push(left(`本次共 ${info.sel.length} 笔 · 合计 ${money(info.total)}`, P, y + 28, '#2d3436', 26, 600));
+    y += 24 + 44;
+    // 每人应收应付
+    parts.push(left('每人 应收 / 应付', P, y + 4, '#636e72', 22, 700));
+    y += 34;
+    for (const b of info.balances) {
+      const payable = b.balance < -0.01, receivable = b.balance > 0.01;
+      const label = payable ? '应付' : (receivable ? '应收' : '平账');
+      const color = payable ? '#e74c3c' : (receivable ? '#00b894' : '#95a5a6');
+      parts.push(`<rect x="${P}" y="${y}" width="${CW}" height="62" rx="12" fill="#f8f9fb"/>`);
+      parts.push(left(b.name, P + 20, y + 39, '#2d3436', 24, 600));
+      parts.push(right(`${label} ${money(Math.abs(b.balance))}`, W - P - 20, y + 39, color, 24));
+      y += 62 + 12;
+    }
+    // 转账明细
+    parts.push(left('转账明细', P, y + 4, '#636e72', 22, 700));
+    y += 34;
+    if (info.transfers.length === 0) {
+      parts.push(left('已平账，无需转账', P, y + 28, '#00b894', 22, 600));
+      y += 28 + 28;
+    } else {
+      for (const t of info.transfers) {
+        parts.push(`<rect x="${P}" y="${y}" width="${CW}" height="58" rx="12" fill="#fff5ee"/>`);
+        parts.push(left(`${t.from} → ${t.to}`, P + 20, y + 36, '#2d3436', 22, 600));
+        parts.push(right(money(t.amount), W - P - 20, y + 36, '#e74c3c', 24));
+        y += 58 + 10;
+      }
+    }
+    // 账目明细
+    parts.push(left('账目明细', P, y + 4, '#636e72', 22, 700));
+    y += 34;
+    for (const t of info.sel) {
+      const note = t.note || '未命名账目';
+      const payer = (info.ledger && info.ledger.members && info.ledger.members[t.payerIdx]) || '某人';
+      parts.push(left(`· ${note}（${payer}付）`, P + 8, y + 22, '#2d3436', 20, 400));
+      parts.push(right(money(Utils.txAmt(t)), W - P - 20, y + 22, '#636e72', 20));
+      y += 32;
+    }
+    // 页脚
+    y += 14;
+    parts.push(`<text x="${W / 2}" y="${y + 20}" text-anchor="middle" font-family="${F}" font-size="18" fill="#b2bec3">小Q的工作台 · 生活台 生成</text>`);
+    y += 50;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${y}" viewBox="0 0 ${W} ${y}">
+<rect x="0" y="0" width="${W}" height="${y}" fill="#eef0f4"/>
+${parts.join('\n')}
+</svg>`;
+  },
+
   _settleTxRow(t, ledger, checked, disabled) {
     const cat = this.txCategories[t.categoryIdx] || this.txCategories[7];
     const payer = ledger.members[t.payerIdx] || '?';
@@ -2025,6 +2118,7 @@ const Finance = {
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px">
               <div style="font-size:13px;color:var(--text-secondary)">清算于 ${Utils.formatDateTime(s.date)} · ${gtx.length} 笔 · ${Utils.formatMoney(gTotal)}</div>
               <button class="btn btn-sm btn-danger" onclick="Finance.revertSettlement('${s.id}')">撤销清算</button>
+              <button class="btn btn-sm btn-secondary" onclick="Finance.genSettlementImage('${s.id}')">图片</button>
             </div>
             <div class="card" style="padding:0 12px">`;
         gtx.forEach(t => { html += this._settleTxRow(t, ledger, false, false); });
@@ -2096,7 +2190,7 @@ const Finance = {
     const ids = [...document.querySelectorAll('.settle-tx-check:checked')].map(c => c.dataset.txId);
     if (ids.length === 0) { App.toast('请至少勾选一笔账目'); return; }
     const sel = ids.map(id => st.txById[id]).filter(Boolean);
-    const { transfers } = this.computeSettlement(sel, st.ledger);
+    const { balances, transfers } = this.computeSettlement(sel, st.ledger);
     const total = sel.reduce((a, t) => a + Utils.txAmt(t), 0);
     const sid = Utils.uid();
     const settlePuts = [];
@@ -2105,14 +2199,52 @@ const Finance = {
       settlePuts.push(DB.put('transactions', t));
     }
     await Promise.all(settlePuts);
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
     await DB.add('settlements', {
-      id: sid, ledgerId: st.ledger.id, date: new Date().toISOString(),
+      id: sid, ledgerId: st.ledger.id, date: d.toISOString(),
       txIds: ids, transfers, total
     });
+    // 自动生成「清算单」图片，方便保存到手机
+    const svg = this.buildSettlementSVG({ ledgerName: st.ledger.name, dateStr, sel, balances, transfers, total });
+    try {
+      const blob = await Utils.svgToPng(svg, 2);
+      App.closeSheet();
+      App.toast('已记录清算，已生成清算单图片');
+      this.render();
+      Home.render();
+      App.showSettlementImage(blob);
+      return;
+    } catch (e) {
+      console.error('生成清算单图片失败', e);
+    }
     App.closeSheet();
     App.toast('已记录清算');
     this.render();
     Home.render();
+  },
+
+  // 已清算批次：重新生成清算单图片
+  async genSettlementImage(sid) {
+    const st = this._settleState;
+    if (!st) { App.toast('请先打开清算面板'); return; }
+    const all = await DB.getByIndex('settlements', 'ledgerId', st.ledger.id);
+    const s = all.find(x => x.id === sid);
+    if (!s) { App.toast('未找到该清算'); return; }
+    const txs = (s.txIds || []).map(id => st.txById[id]).filter(Boolean);
+    if (txs.length === 0) { App.toast('该清算无账目'); return; }
+    const { balances, transfers } = this.computeSettlement(txs, st.ledger);
+    const total = txs.reduce((a, t) => a + Utils.txAmt(t), 0);
+    const d = new Date(s.date || Date.now());
+    const dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+    const svg = this.buildSettlementSVG({ ledgerName: st.ledger.name, dateStr, sel: txs, balances, transfers, total });
+    try {
+      const blob = await Utils.svgToPng(svg, 2);
+      App.showSettlementImage(blob);
+    } catch (e) {
+      console.error('生成清算单图片失败', e);
+      App.toast('生成图片失败');
+    }
   },
 
   async revertSettlement(sid) {
@@ -3441,14 +3573,12 @@ const Diary = {
   async render() {
     const pane = document.getElementById('diaryPane');
     const items = await DB.getAll('diary');
-    items.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-
-    const groups = {};
-    for (const it of items) {
-      const d = it.date || Utils.localDate(it.timestamp);
-      (groups[d] = groups[d] || []).push(it);
-    }
-    const dayKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    const todayKey = Utils.todayLocal();
+    // 日记 Tab 只聚焦「今天」：随手记 + 今日纪录片；历史回看交给日历
+    const todayItems = items
+      .filter(it => (it.date || Utils.localDate(it.timestamp)) === todayKey)
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    const hasOtherDays = items.some(it => (it.date || Utils.localDate(it.timestamp)) !== todayKey);
 
     let html = `
       <div class="diary-quick">
@@ -3458,29 +3588,28 @@ const Diary = {
       <div class="diary-moods" id="diaryMoods">
         ${this._MOODS.map(m => `<span class="mood-btn" onclick="Diary.pickMood('${m}', this)">${m}</span>`).join('')}
       </div>
+      <div class="diary-today-head">📅 今天 · ${Utils.formatDateCN2(todayKey)}</div>
     `;
 
-    if (items.length === 0) {
-      html += `<div class="empty-state"><div class="icon">📔</div><div class="text">还没有日记，上面输入框记一条吧</div></div>`;
+    if (todayItems.length === 0) {
+      html += `<div class="empty-state"><div class="icon">📔</div><div class="text">今天还没记录，上面输入框记一条吧～</div></div>`;
     } else {
-      for (const dk of dayKeys) {
-        const list = groups[dk];
-        html += `<div class="diary-day">
-          <div class="diary-day-head">${Utils.formatDateCN2(dk)}</div>`;
-        for (const it of list) {
-          const t = (it.timestamp || '').slice(11, 16) || '';
-          html += `
-            <div class="diary-item" onclick="Diary.showEdit('${it.id}')">
-              <div class="diary-time">${t}</div>
-              <div class="diary-body">
-                ${it.mood ? `<span class="diary-mood">${it.mood}</span>` : ''}
-                <span class="diary-text">${Utils.escape(it.content)}</span>
-              </div>
-              <div class="diary-del" onclick="event.stopPropagation();Diary.deleteItem('${it.id}')">🗑</div>
-            </div>`;
-        }
-        html += `</div>`;
+      for (const it of todayItems) {
+        const t = (it.timestamp || '').slice(11, 16) || '';
+        html += `
+          <div class="diary-item" onclick="Diary.showEdit('${it.id}')">
+            <div class="diary-time">${t}</div>
+            <div class="diary-body">
+              ${it.mood ? `<span class="diary-mood">${it.mood}</span>` : ''}
+              <span class="diary-text">${Utils.escape(it.content)}</span>
+            </div>
+            <div class="diary-del" onclick="event.stopPropagation();Diary.deleteItem('${it.id}')">🗑</div>
+          </div>`;
       }
+    }
+
+    if (hasOtherDays) {
+      html += `<div class="diary-history-hint" onclick="Notes.switchTab('calendar', document.querySelectorAll('#notesSeg .segment-item')[2])">📅 想看过去的日子？去日历回看 →</div>`;
     }
     pane.innerHTML = html;
   },
@@ -3923,7 +4052,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.5.1';
+const BUILD_VERSION = '1.6.0';
 
 const App = {
   currentPage: 'home',
@@ -4530,6 +4659,48 @@ const App = {
     a.href = url; a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     return 'downloaded';
+  },
+
+  // 清算单图片：展示 + 长按保存
+  showSettlementImage(blob) {
+    this._imgBlob = blob;
+    const url = URL.createObjectURL(blob);
+    this._imgUrl = url;
+    const html = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">清算单图片</div>
+      <div style="text-align:center;padding:8px 0 4px">
+        <img src="${url}" style="width:100%;max-width:300px;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.15);background:#fff">
+      </div>
+      <div style="font-size:13px;color:var(--text-light);text-align:center;line-height:1.7;margin:6px 0 10px">
+        📱 手机：<b>长按图片</b>即可保存到相册<br>
+        💻 电脑：右键图片「图片另存为」<br>
+        或点下方按钮调起系统分享 / 下载
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="App.closeSheet()">关闭</button>
+        <button class="btn btn-primary" onclick="App.saveImageBlob('清算单_${Utils.todayLocal()}.png')">保存 / 分享</button>
+      </div>`;
+    this.openSheet(html);
+  },
+
+  async saveImageBlob(filename) {
+    const blob = this._imgBlob;
+    if (!blob) { this.toast('图片未就绪'); return; }
+    const ua = (navigator.userAgent || '').toLowerCase();
+    if (/micromessenger/i.test(ua)) { this.toast('请长按上方图片保存到相册'); return; }
+    let file = null;
+    try { file = new File([blob], filename, { type: 'image/png' }); } catch (e) { file = blob; }
+    if (navigator.canShare && file instanceof Blob && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: '清算单', text: '我的清算单' });
+        return;
+      } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   },
 
   // 微信等不支持分享/下载的环境：弹窗显示全部内容，可一键复制或长按复制
