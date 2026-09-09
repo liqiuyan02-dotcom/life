@@ -4052,7 +4052,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.6.0';
+const BUILD_VERSION = '1.6.1';
 
 const App = {
   currentPage: 'home',
@@ -4400,29 +4400,29 @@ const App = {
       const f2 = '生活台打卡_' + Utils.todayStr() + '.csv';
       const b1 = new Blob([txCsv], { type: 'text/csv;charset=utf-8' });
       const b2 = new Blob([chCsv], { type: 'text/csv;charset=utf-8' });
-      // 手机端优先用系统分享（可同时存两个文件/发微信），不支持再下载
-      const files = [];
-      try { files.push(new File([b1], f1, { type: 'text/csv' })); } catch (e) {}
-      try { files.push(new File([b2], f2, { type: 'text/csv' })); } catch (e) {}
-      if (files.length && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files })) {
-        try {
-          await navigator.share({ files, title: '生活台 Excel 表', text: '账目与打卡 CSV' });
-          this.toast('已调起系统分享，可存到「文件」或发微信');
-          return;
-        } catch (e) {
-          if (e && e.name === 'AbortError') { this.toast('已取消'); return; }
+      const ua2 = (typeof navigator !== 'undefined' && navigator.userAgent || '').toLowerCase();
+      // 微信内置浏览器：直接下载会被拦截，尝试分享，不行再复制文本兜底
+      if (/micromessenger/i.test(ua2)) {
+        const files = [];
+        try { files.push(new File([b1], f1, { type: 'text/csv' })); } catch (e) {}
+        try { files.push(new File([b2], f2, { type: 'text/csv' })); } catch (e) {}
+        if (files.length && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files })) {
+          try {
+            await navigator.share({ files, title: '生活台 Excel 表', text: '账目与打卡 CSV' });
+            this.toast('已调起系统分享，可存到「文件」或发微信');
+            return;
+          } catch (e) {
+            if (e && e.name === 'AbortError') { this.toast('已取消'); return; }
+          }
         }
-      }
-      // 微信内置浏览器：下载会被拦截，改为复制文本兜底
-      const ua1 = (typeof navigator !== 'undefined' && navigator.userAgent || '').toLowerCase();
-      if (/micromessenger/i.test(ua1)) {
         const combined = '===== 账目 ' + f1 + ' =====\n' + txCsv + '\n\n===== 打卡 ' + f2 + ' =====\n' + chCsv;
         App.showCopyModal('生活台数据.csv', combined);
         this.toast('已生成可复制文本，点「复制全部」存出来');
         return;
       }
-      this._downloadFile(f1, txCsv, 'text/csv;charset=utf-8');
-      this._downloadFile(f2, chCsv, 'text/csv;charset=utf-8');
+      // 其他环境：直接下载（真正的可下载文件）
+      App._downloadFile(f1, txCsv, 'text/csv;charset=utf-8');
+      App._downloadFile(f2, chCsv, 'text/csv;charset=utf-8');
       this.toast('已导出账目与打卡 Excel 表（CSV）');
     })();
   },
@@ -4627,36 +4627,31 @@ const App = {
 
   // 优先用系统分享：手机可直接存到「文件」App / 微信 / 钉钉；不支持时回退浏览器下载
   async shareOrDownload(blob, filename, opts = {}) {
-    let file = null;
-    try { file = new File([blob], filename, { type: blob.type || 'application/octet-stream' }); }
-    catch (e) { file = blob; }
-    const canShare = typeof navigator !== 'undefined' && navigator.canShare &&
-      (file instanceof Blob ? navigator.canShare({ files: [file] }) : false);
-    if (canShare) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: opts.title || '生活台数据',
-          text: opts.text || '生活台数据备份'
-        });
-        return 'shared';
-      } catch (e) {
-        if (e && e.name === 'AbortError') return 'cancelled'; // 用户取消分享
-        // 分享失败，继续走下载兜底
-      }
-    }
-    // 微信内置浏览器：下载会被拦截，改为显示文本供复制
     const ua0 = (typeof navigator !== 'undefined' && navigator.userAgent || '').toLowerCase();
-    if (/micromessenger/i.test(ua0)) {
+    const isWX = /micromessenger/i.test(ua0);
+    // 微信内置浏览器：直接下载会被拦截，走分享/复制兜底
+    if (isWX) {
+      let file = null;
+      try { file = new File([blob], filename, { type: blob.type || 'application/octet-stream' }); } catch (e) { file = blob; }
+      const canShare = typeof navigator !== 'undefined' && navigator.canShare && (file instanceof Blob ? navigator.canShare({ files: [file] }) : false);
+      if (canShare) {
+        try {
+          await navigator.share({ files: [file], title: opts.title || '生活台数据', text: opts.text || '生活台数据备份' });
+          return 'shared';
+        } catch (e) {
+          if (e && e.name === 'AbortError') return 'cancelled'; // 用户取消分享
+        }
+      }
       let content = (typeof opts.text === 'string') ? opts.text : null;
       if (content == null) { try { content = await blob.text(); } catch (e) { content = ''; } }
       App.showCopyModal(filename, content);
       return 'copy';
     }
-    // 其他：浏览器下载
+    // 其他环境：直接下载（真正的可下载文件）
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     return 'downloaded';
   },
