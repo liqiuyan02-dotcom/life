@@ -4063,7 +4063,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.6.2';
+const BUILD_VERSION = '1.7.0';
 
 const App = {
   currentPage: 'home',
@@ -4071,27 +4071,15 @@ const App = {
   async init() {
     const screen = document.getElementById('authScreen');
     const app = document.getElementById('app');
-    // 双保险：通过 http(s) 打开时强制同源，避免 localStorage 残留的旧服务器地址把登录/读写请求发错地方
+    // 双保险：通过 http(s) 打开时强制同源，避免 localStorage 残留的旧服务器地址把请求发错地方
     if (!location.protocol.startsWith('file')) DB.apiBase = '';
-    if (PERSONAL_MODE) {
-      if (screen) screen.style.display = 'none';
-      if (app) app.style.display = '';
-    }
-    // 进入登录/连接流程时先给出透明状态，避免冷启动期间白屏无反馈
-    if (Auth.token || PERSONAL_MODE) this.updateConn('connecting', '正在连接云端…');
-    if (Auth.token) {
-      try {
-        await Auth.verify();
-        DB.setCloud(Auth.token);
-        await this.ensureSeed();
-        await this.boot();
-        return;
-      } catch (e) {
-        Auth.clear();
-      }
-    }
-    if (PERSONAL_MODE) { await this.autoLogin(); return; }
-    this.showLogin();
+    // 2026-09-17：Render 免费 Postgres 已到期锁定、无法访问，云端数据不可恢复。
+    // 不再依赖账号登录，默认使用本机 IndexedDB（数据只存这台设备），直接打开应用。
+    DB.setLocal();
+    Auth.clear();
+    if (screen) screen.style.display = 'none';
+    if (app) app.style.display = '';
+    await this.boot();
   },
 
   // 个人模式：用内置账号自动登录（账号不存在则自动注册），失败则退回本地模式
@@ -4164,6 +4152,32 @@ const App = {
     this.updateConn(DB.mode === 'cloud' ? 'cloud' : 'local');
     this.registerSW();
     this.checkBuildVersion();
+    this.checkBackupReminder();
+  },
+
+  // ===== 备份提醒：云端模式下每 7 天提醒导出一次 =====
+  // 背景：Render 免费 Postgres 创建 30 天后到期停用（14 天宽限后删数据），免费路径拿不回数据，
+  // 唯一防线是「到期前导出备份」。本地模式下数据就在本机，无需提醒。
+  _backupKeys: { last: 'wb_lastBackup', hint: 'wb_lastBackupHint' },
+  markBackedUp() {
+    try { localStorage.setItem(this._backupKeys.last, String(Date.now())); } catch (e) {}
+  },
+  checkBackupReminder() {
+    if (DB.mode !== 'cloud') return;
+    let last = 0, hint = 0;
+    try {
+      last = parseInt(localStorage.getItem(this._backupKeys.last) || '0', 10) || 0;
+      hint = parseInt(localStorage.getItem(this._backupKeys.hint) || '0', 10) || 0;
+    } catch (e) {}
+    const now = Date.now();
+    if (now - last < 7 * 864e5) return;  // 7 天内备份过，不打扰
+    if (now - hint < 864e5) return;      // 每天最多提醒一次
+    try { localStorage.setItem(this._backupKeys.hint, String(now)); } catch (e) {}
+    const days = last ? Math.floor((now - last) / 864e5) : null;
+    const msg = days == null
+      ? '云端模式建议定期备份：Render 免费数据库 30 天会到期，到期后数据无法找回。现在导出一份备份吗？'
+      : `已经 ${days} 天没备份数据了。Render 免费数据库 30 天会到期，建议现在导出一份。确定导出？`;
+    App.confirm(msg, () => this.exportData().catch(() => {}));
   },
 
   ensureSeed() {
@@ -4588,6 +4602,7 @@ const App = {
         <div style="font-size:13px;color:var(--text-light)">本地模式下不绑定账号。登录云端后可在任意设备同步同一份数据，并保存昵称 / 头像等个人信息。</div>
       </div>`}
 
+      ${DB.mode === 'cloud' ? `
       <div class="card">
         <div class="setting-item" style="display:block">
           <div class="si-label" style="margin-bottom:8px">☁️ 云端服务器地址</div>
@@ -4595,7 +4610,14 @@ const App = {
             style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fafafa">
           <div style="font-size:11px;color:var(--text-light);margin-top:5px">默认已指向云端账号系统。若提示连不上，多为本机网络无法访问该域名（DNS），可改用手机流量，或在能联网的设备上访问同一网址。</div>
         </div>
-      </div>
+      </div>` : `
+      <div class="card">
+        <div class="setting-item" style="display:block">
+          <div class="si-icon">💾</div>
+          <div class="si-label" style="margin-bottom:6px">本机存储（数据只存这台设备）</div>
+          <div style="font-size:12px;color:var(--text-light);line-height:1.5">已停用云端账号：Render 免费数据库到期锁定、无法访问，云端数据不可恢复。请定期用「导出全部数据」备份到手机 / 微信，避免设备丢失导致数据丢失。</div>
+        </div>
+      </div>`}
 
       <div class="card">
         <div class="setting-item" onclick="App.exportData()">
@@ -4614,11 +4636,12 @@ const App = {
           <div class="si-label">导出账目/打卡 Excel 表（CSV）</div>
           <div class="si-arrow">›</div>
         </div>
+        ${DB.mode === 'cloud' ? `
         <div class="setting-item" onclick="App.migrateToCloud()">
           <div class="si-icon">⬆️</div>
-          <div class="si-label">${DB.mode === 'cloud' ? '迁移本机数据到云端账号' : '登录后可迁移本机数据到云端'}</div>
+          <div class="si-label">迁移本机数据到云端账号</div>
           <div class="si-arrow">›</div>
-        </div>
+        </div>` : ''}
         <div class="setting-item" onclick="App.clearData()">
           <div class="si-icon" style="color:var(--danger)">🗑️</div>
           <div class="si-label" style="color:var(--danger)">清空全部数据</div>
@@ -4636,9 +4659,9 @@ const App = {
       </div>` : ''}
 
       <div class="card" style="text-align:center;font-size:13px;color:var(--text-light)">
-        <div>我的生活台 v${BUILD_VERSION}（云端版）</div>
-        <div style="margin-top:4px">${DB.mode === 'cloud' ? ('已同步到云端 · ' + (Auth.phone || '')) : '本地模式 · 数据仅存本设备'}</div>
-        ${DB.mode === 'cloud' ? '<div style="margin-top:6px;color:#e17055">⚠️ 免费数据库 90 天需续期，建议定期用「导出全部数据」备份</div>' : ''}
+        <div>我的生活台 v${BUILD_VERSION}（本地版）</div>
+        <div style="margin-top:4px">本地模式 · 数据仅存本设备</div>
+        <div style="margin-top:6px;color:#e17055">⚠️ 云端已停用（Render 免费库到期锁定），请定期用「导出全部数据」备份，避免设备丢失数据</div>
       </div>
 
       <div class="action-row">
@@ -4794,10 +4817,10 @@ const App = {
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const filename = `生活台备份_${Utils.todayStr()}.json`;
     const res = await App.shareOrDownload(blob, filename, { title: '生活台数据备份', text: jsonStr });
-    if (res === 'shared') App.toast('已调起系统分享，可存到「文件」或发微信');
+    if (res === 'shared') { App.toast('已调起系统分享，可存到「文件」或发微信'); this.markBackedUp(); }
     else if (res === 'cancelled') App.toast('已取消');
     else if (res === 'copy') App.toast('已生成可复制文本，点「复制全部」存出来');
-    else App.toast('已导出（浏览器下载）');
+    else { App.toast('已导出（浏览器下载）'); this.markBackedUp(); }
   },
 
   importData() {
