@@ -839,9 +839,20 @@ input[type="number"] { -webkit-appearance: none; }
 .auth-hint { margin-top: 14px; font-size: 12px; color: var(--text-light); text-align: center; line-height: 1.5; }
 .auth-error { margin-top: 10px; font-size: 13px; color: #e74c3c; text-align: center; line-height: 1.5; min-height: 20px; }
 .auth-local {
-  margin-top: 16px; width: 100%; max-width: 360px; text-align: center;
-  color: #fff; font-size: 13px; text-decoration: underline; cursor: pointer; opacity: .92;
+  margin-top: 16px; width: 100%; max-width: 360px; box-sizing: border-box;
+  text-align: center; color: #fff; font-size: 13.5px; cursor: pointer;
+  padding: 11px 14px; border-radius: 12px; text-decoration: none; font-weight: 600;
+  border: 1.5px solid rgba(255,255,255,.8); background: rgba(255,255,255,.18);
+  line-height: 1.5; text-shadow: 0 1px 2px rgba(0,0,0,.2);
 }
+.auth-local:hover { background: rgba(255,255,255,.3); }
+/* 登录失败时高亮：明确指路「先进本机看数据」 */
+.auth-local.attention {
+  background: #fff; color: #0a7a5f; border-color: #fff; font-weight: 700;
+  text-shadow: none; box-shadow: 0 6px 18px rgba(0,0,0,.2);
+  animation: localPulse 1.6s ease-in-out infinite;
+}
+@keyframes localPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 
 </style>
 </head>
@@ -4052,7 +4063,7 @@ const Home = {
 const PERSONAL_MODE = false;
 const PERSONAL_PHONE = '15989106650';
 const PERSONAL_PWD = '123456';
-const BUILD_VERSION = '1.6.1';
+const BUILD_VERSION = '1.6.2';
 
 const App = {
   currentPage: 'home',
@@ -4231,21 +4242,33 @@ const App = {
       this.toast(autoRegistered ? '账号已自动创建并登录' : (this._authMode === 'register' ? '注册成功，已登录' : '登录成功'));
       this.maybeAutoMigrate();
     } catch (e) {
+      const code = e && e.code;
       let msg = e.message || '操作失败，请确认服务端地址已填写且服务已启动';
-      if (e.name === 'AbortError' || /超时|无法连接|连接服务器|SERVER_ERR/.test(msg)) {
+      if (code === 'DB_DOWN') {
+        // 云端数据库不可用（Render 免费库 30 天到期停用是常见诱因）→ 说清原因并指路本机模式
+        msg = '云端数据库当前不可用，暂时登录不了、也同步不了。可点下方「仅本机使用」先打开本机数据。';
+      } else if (e.name === 'AbortError' || /超时|无法连接|连接服务器/.test(msg)) {
         msg += '。建议刷新页面再试一次（Render 冷启动约 20 秒）';
       }
       if (errEl) errEl.textContent = msg;
       this.toast(msg);
+      this.highlightLocalEntry();
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = this._authMode === 'register' ? '注册并登录' : '登录'; }
     }
+  },
+
+  // 登录失败时把「仅本机使用」入口高亮，避免用户被卡在登录页看不到本机数据
+  highlightLocalEntry() {
+    const el = document.querySelector('.auth-local');
+    if (el) el.classList.add('attention');
   },
 
   async useLocalMode() {
     Auth.clear();
     DB.setLocal();
     await this.boot();
+    this.toast('已进入本机模式：数据只存这台设备，不参与云端同步');
   },
 
   _profile: { nickname: '', avatar: '' },
@@ -4942,7 +4965,7 @@ App.init();
     <div class="auth-error" id="authError"></div>
     <div class="auth-hint" id="authHint">没有账号？切到「注册」先用手机号注册一个即可</div>
   </div>
-  <div class="auth-local" onclick="App.useLocalMode()">仅本机使用（不同步云端）</div>
+  <div class="auth-local" onclick="App.useLocalMode()">仅本机使用 · 先打开本机数据（不同步云端）</div>
 </div>
 
 </body>

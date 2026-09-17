@@ -24,7 +24,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3001;
 const SECRET = process.env.SECRET || 'workbench-dev-secret-change-me';
 const USE_PG = !!process.env.DATABASE_URL;
-const BUILD_VERSION = '1.6.1';
+const BUILD_VERSION = '1.6.2';
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 
 // ---------- PostgreSQL 连接（可选）----------
@@ -269,6 +269,21 @@ async function seedDefaults(db, userUid) {
   return created;
 }
 
+// 存储层故障时的统一提示：明确区分「数据库不可用」与「服务端 bug」，
+// 避免 500 一律笼统报「服务器繁忙」导致无从排查（Render 免费库 30 天到期停用是常见诱因）。
+const STORAGE_ERR_RE = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|ECONNRESET|getaddrinfo|terminating connection|Connection terminated|database .* does not exist|password authentication failed|relation .* does not exist|the database system is starting up|too many clients/i;
+function storageErrMsg(e) {
+  const m = (e && e.message) || '';
+  return STORAGE_ERR_RE.test(m)
+    ? '云端数据库当前不可用，暂时无法登录或同步数据'
+    : '服务器繁忙，请稍后重试';
+}
+function storageErrPayload(e) {
+  const m = (e && e.message) || '';
+  const down = STORAGE_ERR_RE.test(m);
+  return { error: storageErrMsg(e), code: down ? 'DB_DOWN' : 'SERVER_ERR', detail: m.slice(0, 200) };
+}
+
 // ---------- 认证路由 ----------
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -289,7 +304,7 @@ app.post('/api/auth/register', async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error('[register] error:', e.message);
-    res.status(500).json({ error: '服务器繁忙，请稍后重试', code: 'SERVER_ERR' });
+    res.status(500).json(storageErrPayload(e));
   }
 });
 
@@ -306,7 +321,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, user: { id: u.id, phone: String(phone) } });
   } catch (e) {
     console.error('[login] error:', e.message);
-    res.status(500).json({ error: '服务器繁忙，请稍后重试', code: 'SERVER_ERR', detail: (e.message || '').slice(0, 200) });
+    res.status(500).json(storageErrPayload(e));
   }
 });
 
@@ -355,12 +370,15 @@ app.put('/api/auth/profile', authMiddleware, async (req, res) => {
 // ---------- 健康检查（公开，必须放在通用 /api/:store 之前）----------
 app.get('/api/health', async (req, res) => {
   let storage = 'file';
+  let dbOk = true;
+  let dbError = null;
   if (tcbColl) storage = 'cloudbase';
   else if (USE_PG) {
-    try { await pgRun((p) => p.query('SELECT 1')); storage = 'postgres'; }
-    catch (e) { storage = 'postgres_error:' + (e.message || '').slice(0, 140); }
+    storage = 'postgres';
+    try { await pgRun((p) => p.query('SELECT 1')); }
+    catch (e) { dbOk = false; dbError = (e.message || '').slice(0, 140); }
   }
-  res.json({ ok: true, storage, buildVersion: BUILD_VERSION });
+  res.json({ ok: true, storage, dbOk, dbError, buildVersion: BUILD_VERSION });
 });
 
 // ---------- 种子 ----------
