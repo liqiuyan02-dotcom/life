@@ -35,8 +35,34 @@ if (USE_PG) {
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
     max: 5,
+    keepAlive: true,
+    connectionTimeoutMillis: 8000,
+    idleTimeoutMillis: 30000,
   });
   pool.on('error', (e) => console.error('[pg] unexpected error', e.message));
+}
+
+// 连接自愈：Render 免费 Postgres 在连接空闲后会被服务端关闭，pg 默认不自动重连，
+// 首个 query 会抛 ECONNRESET / connection terminated 等瞬时错误。捕获这类错误后
+// 直接重试同一连接池（pg 会自动重建断开的连接），避免「服务器繁忙」假死。
+// 注意：不要 pool.end() 再 new Pool()，pg 在 end 后会拒绝复用并抛
+// "Cannot use a pool after calling end on the pool"，让自愈反而失效。
+const PG_TRANSIENT = /ECONNRESET|ECONNREFUSED|ETIMEDOUT|57P01|08006|08003|08004|connection terminated|server closed the connection|terminating connection|closed connection|Connection terminated/i;
+async function pgRun(queryFn, retries = 1) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await queryFn(pool);
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries && PG_TRANSIENT.test(e.message || '')) {
+        console.error(`[pg] 瞬时连接错误，重试(${attempt + 1}):`, e.message);
+        continue; // 重试：pg 连接池会自动新建被断开的连接
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
 }
 
 // ---------- 腾讯云 CloudBase 云数据库（可选，国内部署时启用）----------
@@ -109,7 +135,7 @@ async function loadDB() {
     return db;
   }
   if (USE_PG) {
-    const r = await pool.query("SELECT value FROM kv WHERE key = 'db'");
+    const r = await pgRun((p) => p.query("SELECT value FROM kv WHERE key = 'db'"));
     if (r.rows.length) return r.rows[0].value;
     return EMPTY_DB();
   }
@@ -135,10 +161,10 @@ async function saveDB(db) {
     return;
   }
   if (USE_PG) {
-    await pool.query(
+    await pgRun((p) => p.query(
       "INSERT INTO kv (key, value) VALUES ('db', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
       [JSON.stringify(db)]
-    );
+    ));
     return;
   }
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -280,7 +306,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, user: { id: u.id, phone: String(phone) } });
   } catch (e) {
     console.error('[login] error:', e.message);
-    res.status(500).json({ error: '服务器繁忙，请稍后重试', code: 'SERVER_ERR' });
+    res.status(500).json({ error: '服务器繁忙，请稍后重试', code: 'SERVER_ERR', detail: (e.message || '').slice(0, 200) });
   }
 });
 
@@ -327,11 +353,15 @@ app.put('/api/auth/profile', authMiddleware, async (req, res) => {
 });
 
 // ---------- 健康检查（公开，必须放在通用 /api/:store 之前）----------
-app.get('/api/health', (req, res) => res.json({
-  ok: true,
-  storage: tcbColl ? 'cloudbase' : (USE_PG ? 'postgres' : 'file'),
-  buildVersion: BUILD_VERSION
-}));
+app.get('/api/health', async (req, res) => {
+  let storage = 'file';
+  if (tcbColl) storage = 'cloudbase';
+  else if (USE_PG) {
+    try { await pgRun((p) => p.query('SELECT 1')); storage = 'postgres'; }
+    catch (e) { storage = 'postgres_error:' + (e.message || '').slice(0, 140); }
+  }
+  res.json({ ok: true, storage, buildVersion: BUILD_VERSION });
+});
 
 // ---------- 种子 ----------
 app.post('/api/seed-defaults', authMiddleware, async (req, res) => {
@@ -518,9 +548,9 @@ async function initStore() {
     console.log('[workbench] 使用本地 JSON 文件存储:', DATA_FILE);
     return;
   }
-  await pool.query(
+  await pgRun((p) => p.query(
     "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB NOT NULL)"
-  );
+  ));
   // 可选：通过环境变量 SEED_PHONE / SEED_PASSWORD 在数据库为空时预建账号
   const db = await loadDB();
   if (Object.keys(db.users || {}).length === 0 && process.env.SEED_PHONE && process.env.SEED_PASSWORD) {
